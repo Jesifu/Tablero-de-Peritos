@@ -18,305 +18,199 @@
     opacity: 0.035; mix-blend-mode: overlay;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='120' height='120' filter='url(%23n)' opacity='0.9'/></svg>");
   }
-  .loading { display:flex; align-items:center; justify-content:center; min-height:100vh; color:#7a7163; font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:0.2em; text-transform:uppercase; }
 </style>
 </head>
 <body>
-<div id="root"><div class="loading">Cargando tablero…</div></div>
+<div id="root"></div>
 
 <script type="text/babel" data-presets="react">
-const { useState, useEffect, useRef, useCallback, useMemo } = React;
+const { useState, useEffect, useMemo, useRef } = React;
 
 /* ══════════════════════════════════════════════════════════
-   DATOS — Procesados del chat proporcionado
+   DATOS — Procesados del chat real de la división
    ══════════════════════════════════════════════════════════ */
 
-const SEED_EVENTS = [{"fecha":"2026-03-17","hora":"17:16","sender":"Gonzalo Abraldes","tipo":"inicio","sumario":"169575/2026","dispositivos":1},{"fecha":"2026-03-27","hora":"16:04","sender":"Cristian Navarro","tipo":"recepcion","sumario":"193763/2026","dispositivos":2},{"fecha":"2026-04-15","hora":"09:15","sender":"Flavia Romero","tipo":"inicio","sumario":"214429/2026","dispositivos":1},{"fecha":"2026-04-15","hora":"10:51","sender":"Oscar Cussit","tipo":"finalizacion","sumario":"220193/2026","dispositivos":2},{"fecha":"2026-04-15","hora":"11:59","sender":"Viviana De Francesco","tipo":"recepcion","sumario":"234886/2026","dispositivos":2},{"fecha":"2026-04-15","hora":"13:57","sender":"Viviana De Francesco","tipo":"recepcion","sumario":"234994/2026","dispositivos":1},{"fecha":"2026-04-15","hora":"15:30","sender":"Alejandro Capellini","tipo":"inicio","sumario":"232154/2026","dispositivos":1},{"fecha":"2026-04-15","hora":"16:07","sender":"Viviana De Francesco","tipo":"recepcion","sumario":"235442/2026","dispositivos":8},{"fecha":"2026-04-15","hora":"16:39","sender":"Inspector Nazareno Avalos","tipo":"recepcion","sumario":"235674/2026","dispositivos":1},{"fecha":"2026-04-15","hora":"17:54","sender":"Alejandro Capellini","tipo":"finalizacion","sumario":"232154/2026","dispositivos":1},{"fecha":"2026-04-15","hora":"18:03","sender":"Oscar Cussit","tipo":"inicio","sumario":"220779/2026","dispositivos":2},{"fecha":"2026-04-15","hora":"18:11","sender":"Inspector Nazareno Avalos","tipo":"recepcion","sumario":"235950/2026","dispositivos":1},{"fecha":"2026-04-16","hora":"12:32","sender":"Santiago Pociello","tipo":"inicio","sumario":"220856/2026","dispositivos":4},{"fecha":"2026-04-16","hora":"12:47","sender":"Karen Trepowski","tipo":"finalizacion","sumario":"175297/2026","dispositivos":6},{"fecha":"2026-04-16","hora":"12:49","sender":"Guido Orellana","tipo":"finalizacion","sumario":"174965/2026","dispositivos":8},{"fecha":"2026-04-16","hora":"12:50","sender":"Walter Ponce","tipo":"inicio","sumario":"233591/2026","dispositivos":2},{"fecha":"2026-04-16","hora":"12:54","sender":"Walter Ponce","tipo":"inicio","sumario":"175080/2026","dispositivos":1},{"fecha":"2026-04-16","hora":"13:15","sender":"Cristian Navarro","tipo":"recepcion","sumario":"237533/2026","dispositivos":2},{"fecha":"2026-04-16","hora":"13:29","sender":"Cristian Navarro","tipo":"recepcion","sumario":"237607/2026","dispositivos":2},{"fecha":"2026-04-16","hora":"15:05","sender":"Cristian Navarro","tipo":"recepcion","sumario":"237871/2026","dispositivos":1},{"fecha":"2026-04-16","hora":"15:47","sender":"Cristian Navarro","tipo":"recepcion","sumario":"238025/2026","dispositivos":3},{"fecha":"2026-04-16","hora":"16:44","sender":"Karen Trepowski","tipo":"inicio","sumario":"237871/2026","dispositivos":1},{"fecha":"2026-04-16","hora":"17:33","sender":"Guido Orellana","tipo":"finalizacion","sumario":"213633/2026","dispositivos":2},{"fecha":"2026-04-16","hora":"18:10","sender":"Guido Orellana","tipo":"inicio","sumario":"237533/2026","dispositivos":2},{"fecha":"2026-04-16","hora":"19:05","sender":"Karen Trepowski","tipo":"finalizacion","sumario":"237871/2026","dispositivos":1},{"fecha":"2026-04-17","hora":"09:37","sender":"Santiago Pociello","tipo":"finalizacion","sumario":"220856/2026","dispositivos":4},{"fecha":"2026-04-17","hora":"09:44","sender":"Oscar Cussit","tipo":"finalizacion","sumario":"220779/2026","dispositivos":2},{"fecha":"2026-04-17","hora":"09:47","sender":"Oscar Cussit","tipo":"inicio","sumario":"229678/2026","dispositivos":4},{"fecha":"2026-04-17","hora":"10:24","sender":"Santiago Pociello","tipo":"inicio","sumario":"230278/2026","dispositivos":4},{"fecha":"2026-04-17","hora":"14:51","sender":"Evelyn Ramos","tipo":"finalizacion","sumario":"235674/2026","dispositivos":1},{"fecha":"2026-04-17","hora":"16:08","sender":"Inspector Nazareno Avalos","tipo":"recepcion","sumario":"241122/2026","dispositivos":3},{"fecha":"2026-04-17","hora":"16:09","sender":"Viviana De Francesco","tipo":"recepcion","sumario":"241132/2026","dispositivos":8},{"fecha":"2026-04-17","hora":"16:28","sender":"Viviana De Francesco","tipo":"recepcion","sumario":"241261/2026","dispositivos":1},{"fecha":"2026-04-17","hora":"16:52","sender":"Inspector Nazareno Avalos","tipo":"recepcion","sumario":"241284/2026","dispositivos":3},{"fecha":"2026-04-17","hora":"17:01","sender":"Viviana De Francesco","tipo":"recepcion","sumario":"241327/2026","dispositivos":4},{"fecha":"2026-04-17","hora":"17:58","sender":"Juan Manuel Gonzalez","tipo":"recepcion","sumario":"241492/2026","dispositivos":1},{"fecha":"2026-04-17","hora":"18:55","sender":"Inspector Nazareno Avalos","tipo":"recepcion","sumario":"241729/2026","dispositivos":6},{"fecha":"2026-04-17","hora":"19:01","sender":"Oscar Cussit","tipo":"inicio","sumario":"191404/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"09:17","sender":"Guido Orellana","tipo":"finalizacion","sumario":"237533/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"09:30","sender":"Horacio Lopez","tipo":"inicio","sumario":"237607/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"09:49","sender":"Karen Trepowski","tipo":"finalizacion","sumario":"233540/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"10:47","sender":"Cristian Navarro","tipo":"recepcion","sumario":"247243/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"10:57","sender":"Guido Orellana","tipo":"finalizacion","sumario":"241492/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"12:15","sender":"Cristian Navarro","tipo":"recepcion","sumario":"247492/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"12:22","sender":"Guido Orellana","tipo":"inicio","sumario":"247243/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"13:26","sender":"Karen Trepowski","tipo":"finalizacion","sumario":"232880/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"14:04","sender":"Guido Orellana","tipo":"finalizacion","sumario":"247243/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"14:31","sender":"Karen Trepowski","tipo":"inicio","sumario":"230060/2026","dispositivos":4},{"fecha":"2026-04-20","hora":"14:39","sender":"Horacio Lopez","tipo":"finalizacion","sumario":"140916/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"14:43","sender":"Horacio Lopez","tipo":"finalizacion","sumario":"237607/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"15:00","sender":"Horacio Lopez","tipo":"inicio","sumario":"220313/2026","dispositivos":4},{"fecha":"2026-04-20","hora":"15:09","sender":"Walter Ponce","tipo":"inicio","sumario":"238025/2026","dispositivos":3},{"fecha":"2026-04-20","hora":"15:50","sender":"Cristian Navarro","tipo":"recepcion","sumario":"248189/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"16:04","sender":"Cristian Navarro","tipo":"recepcion","sumario":"248213/2026","dispositivos":5},{"fecha":"2026-04-20","hora":"16:48","sender":"Guido Orellana","tipo":"finalizacion","sumario":"85170/2026","dispositivos":3},{"fecha":"2026-04-20","hora":"16:49","sender":"Karen Trepowski","tipo":"inicio","sumario":"248189/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"18:04","sender":"Cristian Navarro","tipo":"recepcion","sumario":"248559/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"18:42","sender":"Karen Trepowski","tipo":"inicio","sumario":"248550/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"18:50","sender":"Walter Ponce","tipo":"finalizacion","sumario":"238025/2026","dispositivos":3},{"fecha":"2026-04-21","hora":"07:20","sender":"Flavia Romero","tipo":"finalizacion","sumario":"203771/2026","dispositivos":1},{"fecha":"2026-04-21","hora":"07:29","sender":"Flavia Romero","tipo":"inicio","sumario":"241284/2026","dispositivos":3},{"fecha":"2026-04-21","hora":"08:39","sender":"Evelyn Ramos","tipo":"inicio","sumario":"241122/2026","dispositivos":3},{"fecha":"2026-04-21","hora":"11:27","sender":"Cintia Sandoval","tipo":"inicio","sumario":"213847/2026","dispositivos":2},{"fecha":"2026-04-21","hora":"13:26","sender":"Santiago Pociello","tipo":"inicio","sumario":"241132/2026","dispositivos":8},{"fecha":"2026-04-21","hora":"13:47","sender":"Viviana De Francesco","tipo":"recepcion","sumario":"250259/2026","dispositivos":2},{"fecha":"2026-04-21","hora":"16:03","sender":"Viviana De Francesco","tipo":"recepcion","sumario":"250722/2026","dispositivos":1},{"fecha":"2026-04-21","hora":"16:26","sender":"Alejandro Capellini","tipo":"inicio","sumario":"250722/2026","dispositivos":1},{"fecha":"2026-04-21","hora":"17:10","sender":"Inspector Nazareno Avalos","tipo":"recepcion","sumario":"250875/2026","dispositivos":24},{"fecha":"2026-04-21","hora":"17:14","sender":"Cintia Sandoval","tipo":"finalizacion","sumario":"213847/2026","dispositivos":2},{"fecha":"2026-04-21","hora":"17:50","sender":"Inspector Nazareno Avalos","tipo":"recepcion","sumario":"251102/2026","dispositivos":14},{"fecha":"2026-04-21","hora":"18:06","sender":"Alejandro Capellini","tipo":"finalizacion","sumario":"250722/2026","dispositivos":1},{"fecha":"2026-04-21","hora":"18:47","sender":"Juan Manuel Gonzalez","tipo":"recepcion","sumario":"251171/2026","dispositivos":3},{"fecha":"2026-04-21","hora":"18:48","sender":"Juan Manuel Gonzalez","tipo":"recepcion","sumario":"251235/2026","dispositivos":5},{"fecha":"2026-04-21","hora":"18:50","sender":"Juan Manuel Gonzalez","tipo":"recepcion","sumario":"251264/2026","dispositivos":1},{"fecha":"2026-04-21","hora":"18:58","sender":"Alejandro Capellini","tipo":"inicio","sumario":"251264/2026","dispositivos":1},{"fecha":"2026-04-21","hora":"19:50","sender":"Flavia Romero","tipo":"finalizacion","sumario":"241284/2026","dispositivos":3}];
-const GENERATED_AT = "2026-04-21 22:15";
-
-const STORAGE_KEY  = 'tablero:events:v1';
+const SEED_EVENTS = [{"fecha":"2026-03-17","hora":"17:16","sender":"Gonzalo Abraldes","tipo":"inicio","sumario":"169575/2026","dispositivos":1},{"fecha":"2026-03-27","hora":"16:04","sender":"Cristian Navarro","tipo":"recepcion","sumario":"193763/2026","dispositivos":2},{"fecha":"2026-04-15","hora":"09:15","sender":"Flavia Romero","tipo":"inicio","sumario":"214429/2026","dispositivos":1},{"fecha":"2026-04-15","hora":"10:51","sender":"Oscar Cussit","tipo":"finalizacion","sumario":"220193/2026","dispositivos":2},{"fecha":"2026-04-15","hora":"15:30","sender":"Alejandro Capellini","tipo":"inicio","sumario":"232154/2026","dispositivos":1},{"fecha":"2026-04-15","hora":"17:54","sender":"Alejandro Capellini","tipo":"finalizacion","sumario":"232154/2026","dispositivos":1},{"fecha":"2026-04-15","hora":"18:03","sender":"Oscar Cussit","tipo":"inicio","sumario":"220779/2026","dispositivos":2},{"fecha":"2026-04-16","hora":"12:32","sender":"Santiago Pociello","tipo":"inicio","sumario":"220856/2026","dispositivos":4},{"fecha":"2026-04-16","hora":"12:47","sender":"Karen Trepowski","tipo":"finalizacion","sumario":"175297/2026","dispositivos":6},{"fecha":"2026-04-16","hora":"12:49","sender":"Guido Orellana","tipo":"finalizacion","sumario":"174965/2026","dispositivos":8},{"fecha":"2026-04-16","hora":"12:50","sender":"Walter Ponce","tipo":"inicio","sumario":"233591/2026","dispositivos":2},{"fecha":"2026-04-16","hora":"12:54","sender":"Walter Ponce","tipo":"inicio","sumario":"175080/2026","dispositivos":1},{"fecha":"2026-04-16","hora":"16:44","sender":"Karen Trepowski","tipo":"inicio","sumario":"237871/2026","dispositivos":1},{"fecha":"2026-04-16","hora":"17:33","sender":"Guido Orellana","tipo":"finalizacion","sumario":"213633/2026","dispositivos":2},{"fecha":"2026-04-16","hora":"18:10","sender":"Guido Orellana","tipo":"inicio","sumario":"237533/2026","dispositivos":2},{"fecha":"2026-04-16","hora":"19:05","sender":"Karen Trepowski","tipo":"finalizacion","sumario":"237871/2026","dispositivos":1},{"fecha":"2026-04-17","hora":"09:37","sender":"Santiago Pociello","tipo":"finalizacion","sumario":"220856/2026","dispositivos":4},{"fecha":"2026-04-17","hora":"09:44","sender":"Oscar Cussit","tipo":"finalizacion","sumario":"220779/2026","dispositivos":2},{"fecha":"2026-04-17","hora":"09:47","sender":"Oscar Cussit","tipo":"inicio","sumario":"229678/2026","dispositivos":4},{"fecha":"2026-04-17","hora":"10:24","sender":"Santiago Pociello","tipo":"inicio","sumario":"230278/2026","dispositivos":4},{"fecha":"2026-04-17","hora":"14:51","sender":"Evelyn Ramos","tipo":"finalizacion","sumario":"235674/2026","dispositivos":1},{"fecha":"2026-04-17","hora":"19:01","sender":"Oscar Cussit","tipo":"inicio","sumario":"191404/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"09:17","sender":"Guido Orellana","tipo":"finalizacion","sumario":"237533/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"09:30","sender":"Horacio Lopez","tipo":"inicio","sumario":"237607/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"09:49","sender":"Karen Trepowski","tipo":"finalizacion","sumario":"233540/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"10:57","sender":"Guido Orellana","tipo":"finalizacion","sumario":"241492/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"12:22","sender":"Guido Orellana","tipo":"inicio","sumario":"247243/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"13:26","sender":"Karen Trepowski","tipo":"finalizacion","sumario":"232880/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"14:04","sender":"Guido Orellana","tipo":"finalizacion","sumario":"247243/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"14:31","sender":"Karen Trepowski","tipo":"inicio","sumario":"230060/2026","dispositivos":4},{"fecha":"2026-04-20","hora":"14:39","sender":"Horacio Lopez","tipo":"finalizacion","sumario":"140916/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"14:43","sender":"Horacio Lopez","tipo":"finalizacion","sumario":"237607/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"15:00","sender":"Horacio Lopez","tipo":"inicio","sumario":"220313/2026","dispositivos":4},{"fecha":"2026-04-20","hora":"15:09","sender":"Walter Ponce","tipo":"inicio","sumario":"238025/2026","dispositivos":3},{"fecha":"2026-04-20","hora":"16:48","sender":"Guido Orellana","tipo":"finalizacion","sumario":"85170/2026","dispositivos":3},{"fecha":"2026-04-20","hora":"16:49","sender":"Karen Trepowski","tipo":"inicio","sumario":"248189/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"18:42","sender":"Karen Trepowski","tipo":"inicio","sumario":"248550/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"18:50","sender":"Walter Ponce","tipo":"finalizacion","sumario":"238025/2026","dispositivos":3},{"fecha":"2026-04-21","hora":"07:20","sender":"Flavia Romero","tipo":"finalizacion","sumario":"203771/2026","dispositivos":1},{"fecha":"2026-04-21","hora":"07:29","sender":"Flavia Romero","tipo":"inicio","sumario":"241284/2026","dispositivos":3},{"fecha":"2026-04-21","hora":"08:39","sender":"Evelyn Ramos","tipo":"inicio","sumario":"241122/2026","dispositivos":3},{"fecha":"2026-04-21","hora":"11:27","sender":"Cintia Sandoval","tipo":"inicio","sumario":"213847/2026","dispositivos":2},{"fecha":"2026-04-21","hora":"13:26","sender":"Santiago Pociello","tipo":"inicio","sumario":"241132/2026","dispositivos":8},{"fecha":"2026-04-21","hora":"16:26","sender":"Alejandro Capellini","tipo":"inicio","sumario":"250722/2026","dispositivos":1},{"fecha":"2026-04-21","hora":"17:14","sender":"Cintia Sandoval","tipo":"finalizacion","sumario":"213847/2026","dispositivos":2},{"fecha":"2026-04-21","hora":"18:06","sender":"Alejandro Capellini","tipo":"finalizacion","sumario":"250722/2026","dispositivos":1},{"fecha":"2026-04-21","hora":"18:58","sender":"Alejandro Capellini","tipo":"inicio","sumario":"251264/2026","dispositivos":1},{"fecha":"2026-04-21","hora":"19:50","sender":"Flavia Romero","tipo":"finalizacion","sumario":"241284/2026","dispositivos":3}];
+const GENERATED_AT = "2026-04-21 22:30";
 
 /* ══════════════════════════════════════════════════════════
-   LOGIC & HELPERS
+   ESTILOS Y COLORES
    ══════════════════════════════════════════════════════════ */
-
-const iso = (d) => d.toISOString().slice(0, 10);
-const initials = (name) => {
-  const words = name.replace(/^(Ofl|Insp|Aux|aux|Subcrio|Inspector|Ofl My|Ofl 1ro|Crio)\s+/gi, '').trim().split(/\s+/);
-  return ((words[0]?.[0] || '') + (words[words.length - 1]?.[0] || '')).toUpperCase();
+const C = {
+  bg: '#100f0d', card: '#1a1815', border: '#2b2721', gold: '#d4a256', silver: '#b8b4ad', bronze: '#b87333', 
+  sage: '#9fab85', crimson: '#c8383e', text: '#f4ebdb', mute: '#7a7163', blue: '#7a9bb0'
 };
+const RANK_COLORS = [C.gold, C.silver, C.bronze, C.sage, C.blue, C.mute];
 
-// Puntos = Inicio(1) + Cierre(1) + Cada Dispositivo Finalizado(1)
-const SCORE = { inicio: 1, cierre: 1, disp: 1 };
+/* ══════════════════════════════════════════════════════════
+   LÓGICA DE NEGOCIO
+   ══════════════════════════════════════════════════════════ */
+const iso = (d) => d.toISOString().slice(0, 10);
+const initials = (name) => name.split(' ').map(n => n[0]).join('').toUpperCase();
 
-function computeAll(events, referenceDate) {
-  const peritoEv = events.filter((e) => e.tipo !== 'recepcion');
-  const judEv    = events.filter((e) => e.tipo === 'recepcion');
-  const peritoNames = [...new Set(peritoEv.map((e) => e.sender))];
-  const judNames = [...new Set(judEv.map((e) => e.sender))];
+function computeAll(events) {
+  const peritoEv = events.filter(e => e.tipo !== 'recepcion');
+  const judEv    = events.filter(e => e.tipo === 'recepcion');
+  const names = [...new Set(peritoEv.map(e => e.sender))];
+  const refDate = new Date("2026-04-21T23:59:59");
+  const startOfMonth = iso(new Date(refDate.getFullYear(), refDate.getMonth(), 1));
 
-  const today = referenceDate;
-  const hoyStr = iso(today);
-  const startOfMonth = iso(new Date(today.getFullYear(), today.getMonth(), 1));
-
-  const stats = peritoNames.map((name) => {
-    const mine = peritoEv.filter((e) => e.sender === name);
-    const mineMes = mine.filter((e) => e.fecha >= startOfMonth);
-    
-    const inicios = mineMes.filter((e) => e.tipo === 'inicio').length;
-    const finals  = mineMes.filter((e) => e.tipo === 'finalizacion');
+  const stats = names.map(name => {
+    const mine = peritoEv.filter(e => e.sender === name);
+    const mineMes = mine.filter(e => e.fecha >= startOfMonth);
+    const inicios = mineMes.filter(e => e.tipo === 'inicio').length;
+    const finals  = mineMes.filter(e => e.tipo === 'finalizacion');
     
     const dispTotal = finals.reduce((acc, e) => acc + (e.dispositivos || 0), 0);
-    const puntos = (inicios * SCORE.inicio) + (finals.length * SCORE.cierre) + (dispTotal * SCORE.disp);
+    const puntos = (inicios * 1) + (finals.length * 1) + (dispTotal * 1);
     
-    const sumariosUnicos = new Set(mineMes.map((e) => e.sumario).filter(Boolean)).size;
-    const hoy = mine.filter((e) => e.fecha === hoyStr).length;
-
-    const dias = new Set(mine.map((e) => e.fecha));
-    let racha = 0;
-    const cursor = new Date(today);
+    // Racha
+    const dias = new Set(mine.map(e => e.fecha));
+    let racha = 0; const cursor = new Date(refDate);
     while (dias.has(iso(cursor))) { racha++; cursor.setDate(cursor.getDate() - 1); }
 
-    return { 
-      nombre: name, inicial: initials(name), 
-      inicios, finals: finals.length, hoy, puntos, 
-      sumariosUnicos, dispositivos: dispTotal, racha 
-    };
+    return { nombre: name, inicial: initials(name), inicios, finals: finals.length, dispositivos: dispTotal, puntos, racha };
   }).sort((a, b) => b.puntos - a.puntos || b.dispositivos - a.dispositivos);
 
-  const judStats = judNames.map((name) => {
-    const mine = judEv.filter((e) => e.sender === name);
-    return {
-      nombre: name, inicial: initials(name),
-      mes: mine.filter((e) => e.fecha >= startOfMonth).length,
-      total: mine.length,
-    };
-  }).sort((a, b) => b.mes - a.mes);
-
-  const daily = [...new Set(peritoEv.map((e) => e.fecha))].sort().map((f) => {
-    const day = peritoEv.filter((e) => e.fecha === f);
-    const d = new Date(f + 'T12:00:00');
-    return {
-      fecha: f, label: `${d.getDate()}/${d.getMonth() + 1}`,
-      inicios: day.filter((e) => e.tipo === 'inicio').length,
-      finals:  day.filter((e) => e.tipo === 'finalizacion').length,
-    };
-  });
-
-  const totalHoy = peritoEv.filter((e) => e.fecha === hoyStr).length;
-  const totalMes = peritoEv.filter((e) => e.fecha >= startOfMonth).length;
-  const rachaLider = stats.reduce((m, p) => (p.racha > (m?.racha || 0) ? p : m), stats[0]);
-  const recientes = [...peritoEv].sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora)).slice(0, 10);
-
-  return { peritoEv, judEv, stats, judStats, daily, recientes, totalHoy, totalMes, rachaLider };
+  return { stats, peritoEv, judEv, totalHoy: peritoEv.filter(e => e.fecha === iso(refDate)).length };
 }
-
-const C = {
-  bg: '#100f0d', bgSoft: '#16140f', card: '#1a1815', cardAlt: '#221f1a',
-  border: '#2b2721', borderHi: '#3d3730', text: '#f4ebdb', textDim: '#b8aa93', mute: '#7a7163',
-  gold: '#d4a256', silver: '#b8b4ad', bronze: '#b87333', crimson: '#c8383e', sage: '#9fab85', blue: '#7a9bb0', ink: '#1a1815'
-};
-const RANK_COLORS = [C.gold, C.silver, C.bronze, C.sage, C.textDim, C.mute];
 
 /* ══════════════════════════════════════════════════════════
-   COMPONENTS
+   APP COMPONENT
    ══════════════════════════════════════════════════════════ */
+function App() {
+  const { stats, peritoEv, totalHoy } = useMemo(() => computeAll(SEED_EVENTS), []);
+  const top3 = stats.slice(0, 3);
+  const others = stats.slice(3);
+  const recientes = [...peritoEv].sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora)).slice(0, 8);
 
-function Svg({ size = 16, color, fill = 'none', sw = 2, children }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color || 'currentColor'}
-         strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
-      {children}
-    </svg>
-  );
-}
-
-function StackedBars({ data, height = 240 }) {
-  const containerRef = useRef(null);
-  const [w, setW] = useState(800);
-  useEffect(() => {
-    const update = () => { if (containerRef.current) setW(containerRef.current.clientWidth); };
-    update(); window.addEventListener('resize', update); return () => window.removeEventListener('resize', update);
-  }, []);
-
-  const pad = { t: 10, r: 10, b: 30, l: 32 };
-  const chartW = Math.max(100, w - pad.l - pad.r);
-  const chartH = height - pad.t - pad.b;
-  const max = Math.max(1, ...data.map((d) => d.inicios + d.finals));
-  const slot = chartW / Math.max(1, data.length);
-  const barW = Math.min(30, slot * 0.7);
+  const fonts = { serif: "'Instrument Serif', serif", mono: "'JetBrains Mono', monospace" };
 
   return (
-    <div ref={containerRef} className="w-full">
-      <svg width={w} height={height}>
-        {[0, 1, 2, 3, 4].map((i) => {
-          const y = pad.t + chartH - (chartH * i) / 4;
-          return <line key={i} x1={pad.l} y1={y} x2={w - pad.r} y2={y} stroke={C.border} />;
-        })}
-        {data.map((d, i) => {
-          const cx = pad.l + slot * (i + 0.5);
-          const iniH = (d.inicios / (max*1.1)) * chartH;
-          const finH = (d.finals / (max*1.1)) * chartH;
-          return (
-            <g key={i}>
-              <rect x={cx-barW/2} y={pad.t+chartH-iniH} width={barW} height={iniH} fill={C.sage} />
-              <rect x={cx-barW/2} y={pad.t+chartH-iniH-finH} width={barW} height={finH} fill={C.gold} rx="2" />
-              <text x={cx} y={height-8} textAnchor="middle" fontSize="9" fill={C.mute}>{d.label}</text>
-            </g>
-          );
-        })}
-      </svg>
+    <div className="min-h-screen p-6 md:p-12" style={{ background: C.bg, color: C.text }}>
+      <div className="grain" />
+      
+      <header className="mb-16 flex flex-wrap items-end justify-between gap-8 border-b pb-8" style={{ borderColor: C.border }}>
+        <div>
+          <h1 className="text-7xl md:text-9xl leading-none" style={{ fontFamily: fonts.serif }}>
+            Tablero <span style={{ color: C.gold }}>DAYPT</span>
+          </h1>
+          <p className="mt-4 text-xs uppercase tracking-[0.3em]" style={{ color: C.mute, fontFamily: fonts.mono }}>
+            Análisis y Pericias Tecnológicas · {GENERATED_AT}
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-5xl" style={{ fontFamily: fonts.serif }}>{totalHoy}</div>
+          <div className="text-[10px] uppercase tracking-widest" style={{ color: C.mute }}>Actividad Hoy</div>
+        </div>
+      </header>
+
+      {/* PODIO */}
+      <section className="mb-20">
+        <div className="flex items-baseline gap-4 mb-10">
+          <span className="text-xs" style={{ fontFamily: fonts.mono, color: C.mute }}>01</span>
+          <h2 className="text-4xl" style={{ fontFamily: fonts.serif }}>Podio del Mes</h2>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+          {/* Segundo Puesto */}
+          <PodiumCard perito={top3[1]} rank={2} color={C.silver} font={fonts} height="h-64" />
+          {/* Primero Puesto */}
+          <PodiumCard perito={top3[0]} rank={1} color={C.gold} font={fonts} height="h-80" />
+          {/* Tercer Puesto */}
+          <PodiumCard perito={top3[2]} rank={3} color={C.bronze} font={fonts} height="h-56" />
+        </div>
+      </section>
+
+      {/* RESTO DE LA CLASIFICACIÓN */}
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-16">
+        <div className="lg:col-span-2">
+          <div className="flex items-baseline gap-4 mb-8">
+            <span className="text-xs" style={{ fontFamily: fonts.mono, color: C.mute }}>02</span>
+            <h2 className="text-3xl" style={{ fontFamily: fonts.serif }}>Clasificación General</h2>
+          </div>
+          <table className="w-full text-left">
+            <thead>
+              <tr className="text-[10px] uppercase tracking-widest border-b" style={{ borderColor: C.border, color: C.mute, fontFamily: fonts.mono }}>
+                <th className="py-4">#</th>
+                <th className="py-4">Perito</th>
+                <th className="py-4">Inic.</th>
+                <th className="py-4">Final.</th>
+                <th className="py-4">Equipos</th>
+                <th className="py-4 text-right">Pts</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.map((p, i) => (
+                <tr key={i} className="border-b" style={{ borderColor: C.border }}>
+                  <td className="py-4 text-xs" style={{ fontFamily: fonts.mono, color: RANK_COLORS[i] || C.mute }}>{i+1}</td>
+                  <td className="py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold border" 
+                           style={{ borderColor: (RANK_COLORS[i] || C.mute)+'40', color: RANK_COLORS[i] || C.mute }}>
+                        {p.inicial}
+                      </div>
+                      <span className="text-sm">{p.nombre}</span>
+                    </div>
+                  </td>
+                  <td className="py-4 text-xs" style={{ color: C.sage }}>{p.inicios}</td>
+                  <td className="py-4 text-xs" style={{ color: C.gold }}>{p.finals}</td>
+                  <td className="py-4 text-xs" style={{ color: C.blue }}>{p.dispositivos}</td>
+                  <td className="py-4 text-right text-xl font-bold" style={{ fontFamily: fonts.serif }}>{p.puntos}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ÚLTIMOS MOVIMIENTOS */}
+        <aside>
+          <div className="flex items-baseline gap-4 mb-8">
+            <span className="text-xs" style={{ fontFamily: fonts.mono, color: C.mute }}>03</span>
+            <h2 className="text-3xl" style={{ fontFamily: fonts.serif }}>Recientes</h2>
+          </div>
+          <div className="space-y-4">
+            {recientes.map((e, i) => (
+              <div key={i} className="p-4 border rounded-sm flex justify-between items-center" style={{ borderColor: C.border, background: C.card }}>
+                <div>
+                  <div className="text-xs font-bold">{e.sender}</div>
+                  <div className="text-[10px] uppercase mt-1" style={{ color: e.tipo === 'inicio' ? C.sage : C.gold, fontFamily: fonts.mono }}>
+                    {e.tipo} · SUM {e.sumario || '—'}
+                  </div>
+                </div>
+                <div className="text-[10px] font-bold" style={{ color: C.blue, fontFamily: fonts.mono }}>
+                  {e.dispositivos} EQ
+                </div>
+              </div>
+            ))}
+          </div>
+        </aside>
+      </section>
     </div>
   );
 }
 
-function TableroPeritos() {
-  const [events, setEvents] = useState(SEED_EVENTS);
-  const [uploadOpen, setUploadOpen] = useState(false);
-
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) setEvents(JSON.parse(stored));
-  }, []);
-
-  const referenceDate = useMemo(() => {
-    if (!events.length) return new Date();
-    const max = events.reduce((m, e) => (e.fecha > m ? e.fecha : m), events[0].fecha);
-    return new Date(max + 'T23:59:59');
-  }, [events]);
-
-  const { stats, judStats, daily, recientes, totalHoy, totalMes, rachaLider } = useMemo(() => computeAll(events, referenceDate), [events, referenceDate]);
-
-  const fonts = { serif: "'Instrument Serif', serif", sans: "'Manrope', sans-serif", mono: "'JetBrains Mono', monospace" };
-
+function PodiumCard({ perito, rank, color, font, height }) {
+  if (!perito) return null;
   return (
-    <div className="min-h-screen pb-20" style={{ background: C.bg, color: C.text, fontFamily: fonts.sans }}>
-      <div className="grain" />
-      
-      <div className="mx-auto max-w-7xl px-6 pt-12">
-        <header className="mb-12 border-b pb-8" style={{ borderColor: C.border }}>
-          <div className="flex flex-wrap items-end justify-between gap-6">
-            <div>
-              <div className="text-[10px] uppercase tracking-[0.3em] mb-2" style={{ color: C.mute, fontFamily: fonts.mono }}>DAYPT · División Análisis y Pericias Tecnológicas</div>
-              <h1 className="text-6xl md:text-8xl leading-none" style={{ fontFamily: fonts.serif }}>Tablero de <span style={{ color: C.gold }}>Peritos</span></h1>
-              <div className="mt-6 flex gap-3">
-                <div className="px-4 py-2 text-[10px] uppercase flex items-center gap-2 border" style={{ borderColor: C.border, color: C.mute, fontFamily: fonts.mono }}>
-                  {events.length} Eventos · Generado {GENERATED_AT}
-                </div>
-              </div>
-            </div>
-            <div className="text-right flex gap-8">
-              <div><div className="text-4xl" style={{ fontFamily: fonts.serif, color: C.gold }}>{totalHoy}</div><div className="text-[9px] uppercase tracking-widest" style={{ color: C.mute }}>Hoy</div></div>
-              <div><div className="text-4xl" style={{ fontFamily: fonts.serif }}>{totalMes}</div><div className="text-[9px] uppercase tracking-widest" style={{ color: C.mute }}>Mes</div></div>
-              <div><div className="text-4xl" style={{ fontFamily: fonts.serif, color: C.crimson }}>{rachaLider?.racha || 0}d</div><div className="text-[9px] uppercase tracking-widest" style={{ color: C.mute }}>Fuego</div></div>
-            </div>
-          </div>
-        </header>
-
-        {/* RANKING */}
-        <section className="mb-16">
-          <div className="flex items-center gap-4 mb-8">
-            <span className="text-xs" style={{ fontFamily: fonts.mono, color: C.mute }}>01</span>
-            <h2 className="text-3xl" style={{ fontFamily: fonts.serif }}>Clasificación de Peritos</h2>
-            <span className="text-[10px] uppercase tracking-widest ml-auto" style={{ color: C.mute }}>Puntos = Inicio(1) + Cierre(1) + Equipos(1)</span>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b text-[10px] uppercase tracking-widest" style={{ borderColor: C.border, color: C.mute, fontFamily: fonts.mono }}>
-                  <th className="py-4 px-4 w-12">#</th>
-                  <th className="py-4 px-4">Perito</th>
-                  <th className="py-4 px-4">Inicios</th>
-                  <th className="py-4 px-4">Finaliz.</th>
-                  <th className="py-4 px-4">Equipos</th>
-                  <th className="py-4 px-4">Sumarios</th>
-                  <th className="py-4 px-4 text-right">Puntos</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stats.map((p, i) => (
-                  <tr key={i} className="border-b transition-colors hover:bg-white/5" style={{ borderColor: C.border }}>
-                    <td className="py-4 px-4 font-bold" style={{ color: RANK_COLORS[i] || C.mute, fontFamily: fonts.mono }}>{i+1}</td>
-                    <td className="py-4 px-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: (RANK_COLORS[i] || C.mute)+'20', color: RANK_COLORS[i] || C.mute, border: `1px solid ${RANK_COLORS[i] || C.mute}40` }}>{p.inicial}</div>
-                        <span className="text-sm font-medium">{p.nombre}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4 text-sm" style={{ color: C.sage, fontFamily: fonts.mono }}>{p.inicios}</td>
-                    <td className="py-4 px-4 text-sm" style={{ color: C.gold, fontFamily: fonts.mono }}>{p.finals}</td>
-                    <td className="py-4 px-4 text-sm" style={{ color: C.blue, fontFamily: fonts.mono }}>{p.dispositivos}</td>
-                    <td className="py-4 px-4 text-sm" style={{ color: C.textDim, fontFamily: fonts.mono }}>{p.sumariosUnicos}</td>
-                    <td className="py-4 px-4 text-right text-2xl font-bold" style={{ fontFamily: fonts.serif, color: RANK_COLORS[i] || C.text }}>{p.puntos}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* GRÁFICO */}
-        <section className="mb-16">
-          <div className="flex items-center gap-4 mb-6">
-            <span className="text-xs" style={{ fontFamily: fonts.mono, color: C.mute }}>02</span>
-            <h2 className="text-3xl" style={{ fontFamily: fonts.serif }}>Actividad Diaria</h2>
-          </div>
-          <div className="p-8 border rounded-sm" style={{ borderColor: C.border, background: C.card }}>
-            <StackedBars data={daily} />
-            <div className="mt-6 flex gap-6 text-[9px] uppercase tracking-widest" style={{ fontFamily: fonts.mono, color: C.mute }}>
-              <div className="flex items-center gap-2"><div className="w-2 h-2" style={{ background: C.sage }} /> Inicios</div>
-              <div className="flex items-center gap-2"><div className="w-2 h-2" style={{ background: C.gold }} /> Finalizaciones</div>
-            </div>
-          </div>
-        </section>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-          {/* RECIENTES */}
-          <section>
-            <div className="flex items-center gap-4 mb-6">
-              <span className="text-xs" style={{ fontFamily: fonts.mono, color: C.mute }}>03</span>
-              <h2 className="text-3xl" style={{ fontFamily: fonts.serif }}>Últimos Movimientos</h2>
-            </div>
-            <div className="border rounded-sm overflow-hidden" style={{ borderColor: C.border, background: C.card }}>
-              {recientes.map((e, i) => (
-                <div key={i} className="p-4 border-b last:border-0 flex items-center gap-4" style={{ borderColor: C.border }}>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold truncate">{e.sender}</div>
-                    <div className="text-[10px] text-mute uppercase flex gap-2" style={{ fontFamily: fonts.mono }}>
-                      <span style={{ color: e.tipo === 'inicio' ? C.sage : C.gold }}>{e.tipo}</span>
-                      <span>SUM {e.sumario || '—'}</span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[10px]" style={{ fontFamily: fonts.mono, color: C.mute }}>{e.fecha}</div>
-                    <div className="text-[9px] font-bold" style={{ color: C.blue }}>{e.dispositivos} EQ</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* JUDICIALES */}
-          <section>
-            <div className="flex items-center gap-4 mb-6">
-              <span className="text-xs" style={{ fontFamily: fonts.mono, color: C.mute }}>04</span>
-              <h2 className="text-3xl" style={{ fontFamily: fonts.serif }}>Judiciales / Recepción</h2>
-            </div>
-            <div className="p-6 border rounded-sm" style={{ borderColor: C.border, background: C.card }}>
-              {judStats.map((j, i) => (
-                <div key={i} className="mb-4 last:mb-0">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span>{j.nombre}</span>
-                    <span style={{ fontFamily: fonts.mono }}>{j.mes}</span>
-                  </div>
-                  <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                    <div className="h-full" style={{ background: C.blue, width: `${(j.mes / (judStats[0]?.mes || 1)) * 100}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+    <div className={`relative flex flex-col justify-end p-6 border rounded-sm transition-transform hover:-translate-y-2 ${height}`}
+         style={{ background: C.card, borderColor: color + '40' }}>
+      <div className="absolute top-4 left-4 text-5xl opacity-20 font-bold" style={{ color }}>{rank}</div>
+      <div className="text-center mb-6">
+        <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center text-xl font-bold border-2 mb-4"
+             style={{ borderColor: color, color }}>
+          {perito.inicial}
+        </div>
+        <div className="text-xl font-bold truncate">{perito.nombre}</div>
+      </div>
+      <div className="flex justify-between items-end border-t pt-4" style={{ borderColor: C.border }}>
+        <div>
+          <div className="text-xs uppercase" style={{ color: C.mute, fontFamily: font.mono }}>Puntos</div>
+          <div className="text-4xl font-bold" style={{ color, fontFamily: font.serif }}>{perito.puntos}</div>
+        </div>
+        <div className="text-right">
+          <div className="text-[10px] font-bold" style={{ color: C.blue, fontFamily: font.mono }}>{perito.dispositivos} EQUIPOS</div>
+          <div className="text-[10px] uppercase" style={{ color: C.mute, fontFamily: font.mono }}>{perito.racha}d racha</div>
         </div>
       </div>
     </div>
@@ -324,7 +218,7 @@ function TableroPeritos() {
 }
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<TableroPeritos />);
+root.render(<App />);
 </script>
 </body>
 </html>
