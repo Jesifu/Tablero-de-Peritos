@@ -6,403 +6,131 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap">
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <style>
-  html, body { margin: 0; padding: 0; background: #100f0d; color: #f4ebdb; font-family: 'Manrope', system-ui, sans-serif; }
-  #root { min-height: 100vh; }
-  .grain {
-    pointer-events: none;
-    position: fixed; inset: 0;
-    opacity: 0.035; mix-blend-mode: overlay;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='120' height='120' filter='url(%23n)' opacity='0.9'/></svg>");
-  }
-  .loading { display:flex; align-items:center; justify-content:center; min-height:100vh; color:#7a7163; font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:0.2em; text-transform:uppercase; }
+  html, body { background: #100f0d; color: #f4ebdb; font-family: 'Manrope', sans-serif; }
+  .grain { pointer-events: none; position: fixed; inset: 0; opacity: 0.03; mix-blend-mode: overlay; background-image: url("data:image/svg+xml;... (grain)"); }
 </style>
 </head>
 <body>
-<div id="root"><div class="loading">Cargando tablero…</div></div>
+<div id="root"></div>
 
 <script type="text/babel" data-presets="react">
-const { useState, useEffect, useRef, useCallback, useMemo } = React;
-
-/* ══════════════════════════════════════════════════════════
-   DATOS — inyectados por actualizar_tablero.py
-   ══════════════════════════════════════════════════════════ */
+const { useMemo } = React;
 
 const SEED_EVENTS = __EVENTS_JSON__;
 const GENERATED_AT = "__GENERATED_AT__";
 
-const STORAGE_KEY  = 'tablero:events:v1';
-const STORAGE_META = 'tablero:meta:v1';
+const C = { bg: '#100f0d', gold: '#d4a256', silver: '#b8b4ad', bronze: '#b87333', sage: '#9fab85', blue: '#7a9bb0' };
 
-/* ══════════════════════════════════════════════════════════
-   PARSER — WhatsApp export (iOS español)
-   ══════════════════════════════════════════════════════════ */
+function computeAll(events) {
+  const peritoEv = events.filter(e => e.tipo !== 'recepcion');
+  const names = [...new Set(peritoEv.map(e => e.sender))];
+  
+  // Usamos la fecha del último mensaje como "hoy" para el cálculo
+  const lastEvent = events[events.length - 1];
+  const refDateStr = lastEvent ? lastEvent.fecha : "2026-04-21";
+  const startOfMonth = refDateStr.slice(0, 8) + "01";
 
-function parseChatFile(text) {
-  const content = text.replace(/\r\n/g, '\n');
-  const msgRe = /^\[(\d{1,2})\/(\d{1,2})\/(\d{2,4}),\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\]\s+([^:\n]+?):\s?/gm;
-  const matches = [...content.matchAll(msgRe)];
-
-  const events = [];
-  for (let i = 0; i < matches.length; i++) {
-    const m = matches[i];
-    const [, dd, mm, yy, H, M, , sender] = m;
-    const year = yy.length === 2 ? 2000 + parseInt(yy, 10) : parseInt(yy, 10);
-    const start = m.index + m[0].length;
-    const end = i + 1 < matches.length ? matches[i + 1].index : content.length;
-    const body = content.slice(start, end).trim();
-
-    const asuntoMatch = body.match(/\*?asunto\*?[:\*]*\s*([^\n\r]+)/i);
-    if (!asuntoMatch) continue;
-    const asunto = asuntoMatch[1].toLowerCase();
+  const stats = names.map(name => {
+    const mine = peritoEv.filter(e => e.sender === name);
+    const mineMes = mine.filter(e => e.fecha >= startOfMonth);
+    const inicios = mineMes.filter(e => e.tipo === 'inicio').length;
+    const finals  = mineMes.filter(e => e.tipo === 'finalizacion');
     
-    let tipo;
-    if (asunto.includes('recepci') || asunto.includes('recibe')) tipo = 'recepcion';
-    else if (asunto.includes('inicio') || asunto.includes('inici')) tipo = 'inicio';
-    else if (asunto.includes('final') || /\bfin\b/.test(asunto)) tipo = 'finalizacion';
-    else continue;
-
-    const sumarioMatch = body.match(/sumario\s+daypt[^\d]*(\d+\/\d+)/i);
-    
-    // Extraer dispositivos de la RESEÑA: busca números entre paréntesis (01), (2), etc.
-    const resMatch = body.match(/RESEÑA:?([\s\S]*)/i);
-    let dispositivos = 0;
-    if (resMatch) {
-      const resText = resMatch[1];
-      const nums = [...resText.matchAll(/\((\d+)\)/g)];
-      dispositivos = nums.reduce((acc, n) => acc + parseInt(n[1], 10), 0);
-    }
-    
-    // Si es pericia y no detectó números, por defecto es 1 equipo
-    if (dispositivos === 0 && tipo !== 'recepcion') dispositivos = 1;
-
-    events.push({
-      fecha: `${year}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`,
-      hora:  `${H.padStart(2, '0')}:${M}`,
-      sender: sender.trim(),
-      tipo,
-      sumario: sumarioMatch ? sumarioMatch[1] : null,
-      dispositivos
-    });
-  }
-  return events;
-}
-
-const dedupeKey = (e) => `${e.fecha}|${e.hora}|${e.sender}|${e.tipo}|${e.sumario || ''}`;
-
-function mergeEvents(current, incoming) {
-  const seen = new Set(current.map(dedupeKey));
-  let added = 0, skipped = 0;
-  const merged = [...current];
-  for (const e of incoming) {
-    if (seen.has(dedupeKey(e))) { skipped++; continue; }
-    seen.add(dedupeKey(e));
-    merged.push(e);
-    added++;
-  }
-  merged.sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
-  return { events: merged, added, skipped };
-}
-
-/* ══════════════════════════════════════════════════════════
-   HELPERS & LOGIC
-   ══════════════════════════════════════════════════════════ */
-
-const iso = (d) => d.toISOString().slice(0, 10);
-const initials = (name) => {
-  const words = name.replace(/^(Ofl|Insp|Aux|aux|Subcrio|Inspector|Ofl My|Ofl 1ro|Crio)\s+/gi, '').trim().split(/\s+/);
-  return ((words[0]?.[0] || '') + (words[words.length - 1]?.[0] || '')).toUpperCase();
-};
-
-// NUEVO SISTEMA: Inicio(1) + Cierre(1) + Cada Dispositivo Finalizado(1)
-const SCORE = { inicio: 1, cierre: 1, disp: 1 };
-
-function computeAll(events, referenceDate) {
-  const peritoEv = events.filter((e) => e.tipo !== 'recepcion');
-  const judEv    = events.filter((e) => e.tipo === 'recepcion');
-  const peritoNames = [...new Set(peritoEv.map((e) => e.sender))];
-  const judNames = [...new Set(judEv.map((e) => e.sender))];
-
-  const today = referenceDate;
-  const hoyStr = iso(today);
-  const startOfMonth = iso(new Date(today.getFullYear(), today.getMonth(), 1));
-
-  const stats = peritoNames.map((name) => {
-    const mine = peritoEv.filter((e) => e.sender === name);
-    const mineMes = mine.filter((e) => e.fecha >= startOfMonth);
-    
-    const inicios = mineMes.filter((e) => e.tipo === 'inicio').length;
-    const finals  = mineMes.filter((e) => e.tipo === 'finalizacion');
-    
-    // Sumamos dispositivos solo de los mensajes de FINALIZACIÓN
+    // PUNTOS: 1 por cada inicio + 1 por cada cierre + 1 por cada equipo cerrado
     const dispTotal = finals.reduce((acc, e) => acc + (e.dispositivos || 0), 0);
-    
-    // Cálculo de puntos
-    const puntos = (inicios * SCORE.inicio) + (finals.length * SCORE.cierre) + (dispTotal * SCORE.disp);
-    
-    const sumariosUnicos = new Set(mineMes.map((e) => e.sumario).filter(Boolean)).size;
-    const hoy = mine.filter((e) => e.fecha === hoyStr).length;
-
-    // Racha
-    const dias = new Set(mine.map((e) => e.fecha));
-    let racha = 0;
-    const cursor = new Date(today);
-    while (dias.has(iso(cursor))) { racha++; cursor.setDate(cursor.getDate() - 1); }
+    const puntos = (inicios * 1) + (finals.length * 1) + (dispTotal * 1);
 
     return { 
-      nombre: name, inicial: initials(name), 
-      inicios, finals: finals.length, hoy, puntos, 
-      sumariosUnicos, dispositivos: dispTotal, racha 
+      nombre: name, 
+      inicial: name.split(' ').map(n => n[0]).join('').toUpperCase(),
+      inicios, 
+      finals: finals.length, 
+      dispositivos: dispTotal, 
+      puntos 
     };
   }).sort((a, b) => b.puntos - a.puntos || b.dispositivos - a.dispositivos);
 
-  const judStats = judNames.map((name) => {
-    const mine = judEv.filter((e) => e.sender === name);
-    return {
-      nombre: name, inicial: initials(name),
-      mes: mine.filter((e) => e.fecha >= startOfMonth).length,
-      total: mine.length,
-    };
-  }).sort((a, b) => b.mes - a.mes);
-
-  const daily = [...new Set(peritoEv.map((e) => e.fecha))].sort().map((f) => {
-    const day = peritoEv.filter((e) => e.fecha === f);
-    const d = new Date(f + 'T12:00:00');
-    return {
-      fecha: f, label: `${d.getDate()}/${d.getMonth() + 1}`,
-      inicios: day.filter((e) => e.tipo === 'inicio').length,
-      finals:  day.filter((e) => e.tipo === 'finalizacion').length,
-    };
-  });
-
-  const totalHoy = peritoEv.filter((e) => e.fecha === hoyStr).length;
-  const totalMes = peritoEv.filter((e) => e.fecha >= startOfMonth).length;
-  const rachaLider = stats.reduce((m, p) => (p.racha > (m?.racha || 0) ? p : m), stats[0]);
-  const recientes = [...peritoEv].sort((a, b) => (b.fecha + b.hora).localeCompare(a.fecha + a.hora)).slice(0, 10);
-
-  return { peritoEv, judEv, stats, judStats, daily, recientes, totalHoy, totalMes, rachaLider };
+  return { stats, recientes: peritoEv.slice(-8).reverse() };
 }
 
-/* ══════════════════════════════════════════════════════════
-   TOKENS & UI
-   ══════════════════════════════════════════════════════════ */
-
-const C = {
-  bg: '#100f0d', bgSoft: '#16140f', card: '#1a1815', cardAlt: '#221f1a',
-  border: '#2b2721', borderHi: '#3d3730', text: '#f4ebdb', textDim: '#b8aa93', mute: '#7a7163',
-  gold: '#d4a256', silver: '#b8b4ad', bronze: '#b87333', crimson: '#c8383e', sage: '#9fab85', blue: '#7a9bb0', ink: '#1a1815'
-};
-const RANK_COLORS = [C.gold, C.silver, C.bronze, C.sage, C.textDim, C.mute];
-
-const Svg = ({ size = 16, color, fill = 'none', sw = 2, children }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color || 'currentColor'}
-       strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
-    {children}
-  </svg>
-);
-const Play   = (p) => <Svg {...p}><polygon points="6 3 20 12 6 21 6 3"/></Svg>;
-const Check2 = (p) => <Svg {...p}><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></Svg>;
-const UpIcon = (p) => <Svg {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></Svg>;
-const Flame  = (p) => <Svg {...p}><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></Svg>;
-
-/* ══════════════════════════════════════════════════════════
-   COMPONENTS
-   ══════════════════════════════════════════════════════════ */
-
-function StackedBars({ data, height = 240 }) {
-  const containerRef = useRef(null);
-  const [w, setW] = useState(800);
-  useEffect(() => {
-    const update = () => { if (containerRef.current) setW(containerRef.current.clientWidth); };
-    update(); window.addEventListener('resize', update); return () => window.removeEventListener('resize', update);
-  }, []);
-
-  const pad = { t: 10, r: 10, b: 30, l: 32 };
-  const chartW = Math.max(100, w - pad.l - pad.r);
-  const chartH = height - pad.t - pad.b;
-  const max = Math.max(1, ...data.map((d) => d.inicios + d.finals));
-  const slot = chartW / Math.max(1, data.length);
-  const barW = Math.min(30, slot * 0.7);
+function App() {
+  const { stats, recientes } = useMemo(() => computeAll(SEED_EVENTS), []);
+  const top3 = stats.slice(0, 3);
 
   return (
-    <div ref={containerRef} className="w-full">
-      <svg width={w} height={height}>
-        {[0, 1, 2, 3, 4].map((i) => {
-          const y = pad.t + chartH - (chartH * i) / 4;
-          return <line key={i} x1={pad.l} y1={y} x2={w - pad.r} y2={y} stroke={C.border} />;
-        })}
-        {data.map((d, i) => {
-          const cx = pad.l + slot * (i + 0.5);
-          const iniH = (d.inicios / (max*1.1)) * chartH;
-          const finH = (d.finals / (max*1.1)) * chartH;
-          return (
-            <g key={i}>
-              <rect x={cx-barW/2} y={pad.t+chartH-iniH} width={barW} height={iniH} fill={C.sage} />
-              <rect x={cx-barW/2} y={pad.t+chartH-iniH-finH} width={barW} height={finH} fill={C.gold} rx="2" />
-              <text x={cx} y={height-8} textAnchor="middle" fontSize="9" fill={C.mute}>{d.label}</text>
-            </g>
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
+    <div className="max-w-7xl mx-auto p-6 md:p-12">
+      <header className="mb-12 border-b border-white/10 pb-8 flex justify-between items-end">
+        <div>
+          <h1 className="text-7xl font-serif" style={{ fontFamily: 'Instrument Serif' }}>Tablero <span style={{ color: C.gold }}>DAYPT</span></h1>
+          <p className="text-[10px] uppercase tracking-widest mt-2 opacity-50">Generado: {GENERATED_AT}</p>
+        </div>
+      </header>
 
-function TableroPeritos() {
-  const [events, setEvents] = useState(SEED_EVENTS);
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [meta, setMeta] = useState({ source: 'seed', importedAt: null });
+      {/* PODIO RESTAURADO */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16 items-end">
+        {/* Puesto 2 */}
+        <div className="bg-[#1a1815] p-6 rounded-sm border-t-4 border-[#b8b4ad] h-56 flex flex-col justify-between">
+           <span className="text-4xl opacity-20 font-bold">2</span>
+           <div className="text-center font-serif text-2xl">{top3[1]?.nombre || "—"}</div>
+           <div className="text-center text-4xl font-bold" style={{ color: C.silver }}>{top3[1]?.puntos || 0} <span className="text-xs uppercase">pts</span></div>
+        </div>
+        {/* Puesto 1 */}
+        <div className="bg-[#1a1815] p-8 rounded-sm border-t-8 border-[#d4a256] h-72 flex flex-col justify-between shadow-2xl">
+           <span className="text-5xl opacity-20 font-bold">1</span>
+           <div className="text-center font-serif text-3xl text-white">{top3[0]?.nombre || "—"}</div>
+           <div className="text-center text-6xl font-bold" style={{ color: C.gold }}>{top3[0]?.puntos || 0} <span className="text-sm uppercase">pts</span></div>
+        </div>
+        {/* Puesto 3 */}
+        <div className="bg-[#1a1815] p-6 rounded-sm border-t-2 border-[#b87333] h-48 flex flex-col justify-between">
+           <span className="text-3xl opacity-20 font-bold">3</span>
+           <div className="text-center font-serif text-xl">{top3[2]?.nombre || "—"}</div>
+           <div className="text-center text-3xl font-bold" style={{ color: C.bronze }}>{top3[2]?.puntos || 0} <span className="text-xs uppercase">pts</span></div>
+        </div>
+      </div>
 
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) setEvents(JSON.parse(stored));
-  }, []);
-
-  const referenceDate = useMemo(() => {
-    if (!events.length) return new Date();
-    const max = events.reduce((m, e) => (e.fecha > m ? e.fecha : m), events[0].fecha);
-    return new Date(max + 'T23:59:59');
-  }, [events]);
-
-  const { stats, judStats, daily, recientes, totalHoy, totalMes, rachaLider } = useMemo(() => computeAll(events, referenceDate), [events, referenceDate]);
-
-  const fonts = { serif: "'Instrument Serif', serif", sans: "'Manrope', sans-serif", mono: "'JetBrains Mono', monospace" };
-
-  return (
-    <div className="min-h-screen pb-20" style={{ background: C.bg, color: C.text, fontFamily: fonts.sans }}>
-      <div className="grain" />
-      
-      <div className="mx-auto max-w-7xl px-6 pt-12">
-        <header className="mb-12 border-b pb-8" style={{ borderColor: C.border }}>
-          <div className="flex flex-wrap items-end justify-between gap-6">
-            <div>
-              <div className="text-[10px] uppercase tracking-[0.3em] mb-2" style={{ color: C.mute, fontFamily: fonts.mono }}>DAYPT · División Análisis y Pericias Tecnológicas</div>
-              <h1 className="text-6xl md:text-8xl leading-none" style={{ fontFamily: fonts.serif }}>Tablero de <span style={{ color: C.gold }}>Peritos</span></h1>
-              <div className="mt-6 flex gap-3">
-                <button onClick={() => setUploadOpen(true)} className="px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-sm" style={{ background: C.gold, color: C.ink }}>Importar Chat</button>
-                <div className="px-4 py-2 text-[10px] uppercase flex items-center gap-2 border" style={{ borderColor: C.border, color: C.mute, fontFamily: fonts.mono }}>
-                  {events.length} Eventos · Generado {GENERATED_AT}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+        {/* TABLA DETALLADA */}
+        <div className="lg:col-span-2">
+          <h2 className="text-2xl font-serif mb-6">Clasificación General</h2>
+          <table className="w-full text-left">
+            <thead className="text-[10px] uppercase opacity-50 border-b border-white/10">
+              <tr><th className="pb-4">Perito</th><th>Inic.</th><th>Final.</th><th>Equipos</th><th className="text-right">Pts</th></tr>
+            </thead>
+            <tbody className="text-sm">
+              {stats.map((p, i) => (
+                <tr key={i} className="border-b border-white/5">
+                  <td className="py-4 font-bold">{p.nombre}</td>
+                  <td className="py-4" style={{ color: C.sage }}>{p.inicios}</td>
+                  <td className="py-4" style={{ color: C.gold }}>{p.finals}</td>
+                  <td className="py-4" style={{ color: C.blue }}>{p.dispositivos}</td>
+                  <td className="py-4 text-right font-bold text-lg">{p.puntos}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        
+        {/* RECIENTES */}
+        <div>
+          <h2 className="text-2xl font-serif mb-6">Recientes</h2>
+          <div className="space-y-3">
+            {recientes.map((e, i) => (
+              <div key={i} className="bg-[#1a1815] p-4 rounded-sm border border-white/5 flex justify-between items-center">
+                <div className="text-xs uppercase">
+                  <div className="font-bold">{e.sender}</div>
+                  <div className={e.tipo === 'inicio' ? 'text-green-500' : 'text-amber-500'}>{e.tipo}</div>
+                </div>
+                <div className="text-right font-mono text-[10px] opacity-50">
+                  <div>{e.dispositivos} EQUIPOS</div>
+                  <div>SUM {e.sumario}</div>
                 </div>
               </div>
-            </div>
-            <div className="text-right flex gap-8">
-              <div><div className="text-4xl" style={{ fontFamily: fonts.serif, color: C.gold }}>{totalHoy}</div><div className="text-[9px] uppercase tracking-widest" style={{ color: C.mute }}>Hoy</div></div>
-              <div><div className="text-4xl" style={{ fontFamily: fonts.serif }}>{totalMes}</div><div className="text-[9px] uppercase tracking-widest" style={{ color: C.mute }}>Mes</div></div>
-              <div><div className="text-4xl" style={{ fontFamily: fonts.serif, color: C.crimson }}>{rachaLider?.racha || 0}d</div><div className="text-[9px] uppercase tracking-widest" style={{ color: C.mute }}>Fuego</div></div>
-            </div>
+            ))}
           </div>
-        </header>
-
-        {/* RANKING */}
-        <section className="mb-16">
-          <div className="flex items-center gap-4 mb-8">
-            <span className="text-xs" style={{ fontFamily: fonts.mono, color: C.mute }}>01</span>
-            <h2 className="text-3xl" style={{ fontFamily: fonts.serif }}>Clasificación de Peritos</h2>
-            <span className="text-[10px] uppercase tracking-widest ml-auto" style={{ color: C.mute }}>Puntos = Inicio(1) + Cierre(1) + Equipos(1)</span>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b text-[10px] uppercase tracking-widest" style={{ borderColor: C.border, color: C.mute, fontFamily: fonts.mono }}>
-                  <th className="py-4 px-4 w-12">#</th>
-                  <th className="py-4 px-4">Perito</th>
-                  <th className="py-4 px-4">Inicios</th>
-                  <th className="py-4 px-4">Finaliz.</th>
-                  <th className="py-4 px-4">Equipos</th>
-                  <th className="py-4 px-4">Sumarios</th>
-                  <th className="py-4 px-4 text-right">Puntos</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stats.map((p, i) => (
-                  <tr key={i} className="border-b transition-colors hover:bg-white/5" style={{ borderColor: C.border }}>
-                    <td className="py-4 px-4 font-bold" style={{ color: RANK_COLORS[i] || C.mute, fontFamily: fonts.mono }}>{i+1}</td>
-                    <td className="py-4 px-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: (RANK_COLORS[i] || C.mute)+'20', color: RANK_COLORS[i] || C.mute, border: `1px solid ${RANK_COLORS[i] || C.mute}40` }}>{p.inicial}</div>
-                        <span className="text-sm font-medium">{p.nombre}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4 text-sm" style={{ color: C.sage, fontFamily: fonts.mono }}>{p.inicios}</td>
-                    <td className="py-4 px-4 text-sm" style={{ color: C.gold, fontFamily: fonts.mono }}>{p.finals}</td>
-                    <td className="py-4 px-4 text-sm" style={{ color: C.blue, fontFamily: fonts.mono }}>{p.dispositivos}</td>
-                    <td className="py-4 px-4 text-sm" style={{ color: C.textDim, fontFamily: fonts.mono }}>{p.sumariosUnicos}</td>
-                    <td className="py-4 px-4 text-right text-2xl font-bold" style={{ fontFamily: fonts.serif, color: RANK_COLORS[i] || C.text }}>{p.puntos}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* GRÁFICO */}
-        <section className="mb-16">
-          <div className="flex items-center gap-4 mb-6">
-            <span className="text-xs" style={{ fontFamily: fonts.mono, color: C.mute }}>02</span>
-            <h2 className="text-3xl" style={{ fontFamily: fonts.serif }}>Actividad Diaria</h2>
-          </div>
-          <div className="p-8 border rounded-sm" style={{ borderColor: C.border, background: C.card }}>
-            <StackedBars data={daily} />
-            <div className="mt-6 flex gap-6 text-[9px] uppercase tracking-widest" style={{ fontFamily: fonts.mono, color: C.mute }}>
-              <div className="flex items-center gap-2"><div className="w-2 h-2" style={{ background: C.sage }} /> Inicios</div>
-              <div className="flex items-center gap-2"><div className="w-2 h-2" style={{ background: C.gold }} /> Finalizaciones</div>
-            </div>
-          </div>
-        </section>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-          {/* RECIENTES */}
-          <section>
-            <div className="flex items-center gap-4 mb-6">
-              <span className="text-xs" style={{ fontFamily: fonts.mono, color: C.mute }}>03</span>
-              <h2 className="text-3xl" style={{ fontFamily: fonts.serif }}>Últimos Movimientos</h2>
-            </div>
-            <div className="border rounded-sm overflow-hidden" style={{ borderColor: C.border, background: C.card }}>
-              {recientes.map((e, i) => (
-                <div key={i} className="p-4 border-b last:border-0 flex items-center gap-4" style={{ borderColor: C.border }}>
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: (e.tipo === 'inicio' ? C.sage : C.gold)+'20' }}>
-                    {e.tipo === 'inicio' ? <Play size={14} color={C.sage} fill={C.sage} /> : <Check2 size={16} color={C.gold} />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold truncate">{e.sender}</div>
-                    <div className="text-[10px] text-mute uppercase flex gap-2" style={{ fontFamily: fonts.mono }}>
-                      <span style={{ color: e.tipo === 'inicio' ? C.sage : C.gold }}>{e.tipo}</span>
-                      <span>SUM {e.sumario || '—'}</span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[10px]" style={{ fontFamily: fonts.mono, color: C.mute }}>{e.fecha}</div>
-                    <div className="text-[9px] font-bold" style={{ color: C.blue }}>{e.dispositivos} EQ</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* JUDICIALES */}
-          <section>
-            <div className="flex items-center gap-4 mb-6">
-              <span className="text-xs" style={{ fontFamily: fonts.mono, color: C.mute }}>04</span>
-              <h2 className="text-3xl" style={{ fontFamily: fonts.serif }}>Judiciales / Recepción</h2>
-            </div>
-            <div className="p-6 border rounded-sm" style={{ borderColor: C.border, background: C.card }}>
-              {judStats.map((j, i) => (
-                <div key={i} className="mb-4 last:mb-0">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span>{j.nombre}</span>
-                    <span style={{ fontFamily: fonts.mono }}>{j.mes}</span>
-                  </div>
-                  <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                    <div className="h-full" style={{ background: C.blue, width: `${(j.mes / (judStats[0]?.mes || 1)) * 100}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
         </div>
       </div>
     </div>
@@ -410,7 +138,7 @@ function TableroPeritos() {
 }
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<TableroPeritos />);
+root.render(<App />);
 </script>
 </body>
 </html>
