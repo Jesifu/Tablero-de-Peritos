@@ -12,9 +12,11 @@ Tablero interno para visualizar la actividad de pericias reportadas al grupo de 
 
 ## Qué guarda y qué NO
 
-**Sí guarda:** fecha, hora, autor del mensaje, tipo (inicio/finalización/recepción), número de sumario DAYPT.
+**Sí guarda:** fecha, hora, autor del mensaje, tipo (inicio/finalización/recepción), número de sumario DAYPT, cantidad de dispositivos peritados.
 
 **No guarda:** carátulas de causas, nombres de imputados o víctimas, reseñas del hecho. El parser descarta esta información directamente — nunca entra al archivo HTML.
+
+**Dispositivos:** se cuentan sumando todos los números en paréntesis de la reseña. Ejemplo: *"cinco (05) teléfonos celulares, un (1) pendrive, una (1) laptop"* → 7 dispositivos. El parser los trata como enteros sin guardar qué tipo son.
 
 ## Dónde ponerlo
 
@@ -60,10 +62,11 @@ Cada usuario también puede importar un chat desde el mismo tablero (botón "Imp
 
 ## Consideraciones operativas
 
+- **Técnicos sin actividad:** Tres técnicos (Ariel Lopez, Ezequiel Vecino, Daniel Altamirano) aparecen siempre en el ranking aunque no hayan reportado pericias en el período. Se muestran con 0 puntos al final de la tabla. Si en el futuro reportan actividad, sus estadísticas se actualizarán normalmente.
 - **Mensajes temporales de 7 días** están activos en el grupo. Si no se exporta al menos semanalmente, se pierden mensajes. Conviene fijar una rutina.
 - **Duplicación:** el parser y la carga desde el tablero deduplican por `fecha + hora + autor + tipo + sumario`, así que se pueden superponer exports sin problema.
 - **Formato:** el parser está probado con export iOS en español. Si aparece formato Android (sin corchetes, con guión), avisar para ajustar el regex.
-- **Fórmula de puntaje:** inicio = 1 pt, finalización = 2 pts. Se puede modificar en `actualizar_tablero.py` y en la plantilla si se quiere dar más peso a cerrar pericias.
+- **Fórmula de puntaje:** inicio = 1 pt, finalización = 2 pts, dispositivo finalizado = 0.1 pt. Ejemplo: cerrar una pericia con 10 dispositivos = 2 + (10 × 0.1) = 3.0 puntos. Se puede modificar en `tablero.template.html` cambiando la constante `SCORE`.
 
 ## Reglas para una competencia sana
 
