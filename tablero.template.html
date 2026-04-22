@@ -323,10 +323,6 @@ function TableroPeritos() {
   const [events, setEvents] = useState(SEED_EVENTS);
   const [meta, setMeta] = useState({ source: 'seed', importedAt: null, filename: null });
   const [toast, setToast] = useState(null);
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
-  const fileInputRef = useRef(null);
-  const replaceInputRef = useRef(null);
 
   useEffect(() => {
     // DISABLED: Always use embedded SEED_EVENTS, don't load from localStorage
@@ -386,14 +382,6 @@ function TableroPeritos() {
       showToast('error', 'Error al leer el archivo: ' + err.message);
     }
   }, [events]);
-
-  const resetToSeed = () => {
-    setEvents(SEED_EVENTS);
-    const newMeta = { source: 'seed', importedAt: null, filename: null };
-    setMeta(newMeta);
-    persist(SEED_EVENTS, newMeta);
-    showToast('ok', 'Datos restaurados al archivo original');
-  };
 
   const exportCSV = () => {
     const header = ['fecha', 'hora', 'sender', 'tipo', 'sumario', 'dispositivos'];
@@ -458,69 +446,6 @@ function TableroPeritos() {
         </div>
       )}
 
-      {/* UPLOAD MODAL */}
-      {uploadOpen && (
-        <div
-          className="fixed inset-0 z-40 flex items-center justify-center p-6"
-          style={{ background: '#000c' }}
-          onClick={() => setUploadOpen(false)}
-        >
-          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-xl rounded-sm border p-8"
-               style={{ background: C.card, borderColor: C.borderHi }}>
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="text-[10px] uppercase tracking-[0.28em]" style={{ color: C.mute, fontFamily: fonts.mono }}>
-                  Actualizar tablero
-                </div>
-                <h3 style={{ fontFamily: fonts.serif, fontSize: '2.2rem', lineHeight: 1.1, color: C.text }}>
-                  Importar chat de WhatsApp
-                </h3>
-              </div>
-              <button onClick={() => setUploadOpen(false)} className="rounded-sm p-1 hover:bg-white/5" style={{ color: C.mute }}>
-                <XIcon size={18} />
-              </button>
-            </div>
-
-            <p className="mt-3 text-sm" style={{ color: C.textDim }}>
-              En WhatsApp abrí el grupo → tocá el nombre arriba → <b>Exportar chat</b> → <b>Sin archivos adjuntos</b>. Subí acá el <span style={{ fontFamily: fonts.mono, color: C.gold }}>_chat.txt</span>.
-            </p>
-            <p className="mt-2 text-xs" style={{ color: C.mute, fontFamily: fonts.mono }}>
-              Solo se guarda en <b>este navegador</b> (no se sube a ningún servidor).
-            </p>
-
-            <div
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f, 'merge'); }}
-              onClick={() => fileInputRef.current?.click()}
-              className="mt-6 cursor-pointer rounded-sm border-2 border-dashed px-6 py-10 text-center transition-colors"
-              style={{ borderColor: dragOver ? C.gold : C.borderHi, background: dragOver ? `${C.gold}11` : 'transparent' }}
-            >
-              <div style={{ color: dragOver ? C.gold : C.textDim }}>
-                <UpIcon size={28} />
-              </div>
-              <div className="mt-3" style={{ color: C.text, fontSize: 14 }}>
-                Arrastrá el archivo o <span style={{ color: C.gold, textDecoration: 'underline' }}>hacé click</span>
-              </div>
-              <div className="mt-1 text-xs" style={{ color: C.mute, fontFamily: fonts.mono }}>
-                .txt · formato iOS/Android en español
-              </div>
-              <input ref={fileInputRef} type="file" accept=".txt,text/plain" className="hidden"
-                     onChange={(e) => handleFile(e.target.files?.[0], 'merge')} />
-            </div>
-
-            <div className="mt-4 text-xs" style={{ color: C.mute, fontFamily: fonts.mono, lineHeight: 1.6 }}>
-              Por defecto <span style={{ color: C.sage }}>agrega sin duplicar</span>.{' '}
-              <button onClick={() => replaceInputRef.current?.click()} className="underline" style={{ color: C.crimson }}>
-                reemplazar todo en lugar de agregar
-              </button>
-              <input ref={replaceInputRef} type="file" accept=".txt,text/plain" className="hidden"
-                     onChange={(e) => handleFile(e.target.files?.[0], 'replace')} />
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="relative mx-auto max-w-[1400px] px-6 py-10 md:px-12 md:py-14">
 
         {/* HEADER */}
@@ -538,26 +463,12 @@ function TableroPeritos() {
               </p>
 
               <div className="mt-5 flex flex-wrap gap-2">
-                <button onClick={() => setUploadOpen(true)}
-                        className="inline-flex items-center gap-2 rounded-sm border px-3 py-2 text-xs uppercase tracking-[0.15em]"
-                        style={{ background: C.gold, borderColor: C.gold, color: C.ink, fontFamily: fonts.mono, fontWeight: 600 }}>
-                  <UpIcon size={13} color={C.ink} />
-                  Importar chat
-                </button>
                 <button onClick={exportCSV}
                         className="inline-flex items-center gap-2 rounded-sm border px-3 py-2 text-xs uppercase tracking-[0.15em] hover:bg-white/5"
                         style={{ borderColor: C.border, color: C.textDim, fontFamily: fonts.mono }}>
                   <DlIcon size={13} />
                   Exportar CSV
                 </button>
-                {meta.source === 'import' && (
-                  <button onClick={resetToSeed}
-                          className="inline-flex items-center gap-2 rounded-sm border px-3 py-2 text-xs uppercase tracking-[0.15em] hover:bg-white/5"
-                          style={{ borderColor: C.border, color: C.mute, fontFamily: fonts.mono }}>
-                    <Reset size={12} />
-                    Restaurar original
-                  </button>
-                )}
               </div>
 
               <div className="mt-3 text-[10px] uppercase tracking-[0.2em]" style={{ color: C.mute, fontFamily: fonts.mono }}>
