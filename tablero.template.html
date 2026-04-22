@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Tablero de Peritos — DAYPT</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: #100f0d; color: #f4ebdb; font-family: 'Manrope', system-ui, sans-serif; }
+  #root { min-height: 100vh; }
+  .grain {
+    pointer-events: none;
+    position: fixed; inset: 0;
+    opacity: 0.035; mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='120' height='120' filter='url(%23n)' opacity='0.9'/></svg>");
+  }
+  .loading { display:flex; align-items:center; justify-content:center; min-height:100vh; color:#7a7163; font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:0.2em; text-transform:uppercase; }
+</style>
+</head>
+<body>
+<div id="root"><div class="loading">Cargando tablero…</div></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+/* ══════════════════════════════════════════════════════════
+   DATOS — inyectados por actualizar_tablero.py
+   ══════════════════════════════════════════════════════════ */
+
+const SEED_EVENTS = __EVENTS_JSON__;
+const GENERATED_AT = "__GENERATED_AT__";
+
+const STORAGE_KEY  = 'tablero:events:v1';
+const STORAGE_META = 'tablero:meta:v1';
+
+/* ══════════════════════════════════════════════════════════
+   PARSER — WhatsApp export (iOS español)
+   ══════════════════════════════════════════════════════════ */
+
+function parseChatFile(text) {
+  const content = text.replace(/\r\n/g, '\n');
+  const msgRe = /^\[(\d{1,2})\/(\d{1,2})\/(\d{2,4}),\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\]\s+([^:\n]+?):\s?/gm;
+  const matches = [...content.matchAll(msgRe)];
+
+  const events = [];
+  for (let i = 0; i < matches.length; i++) {
+    const m = matches[i];
+    const [, dd, mm, yy, H, M, , sender] = m;
+    const year = yy.length === 2 ? 2000 + parseInt(yy, 10) : parseInt(yy, 10);
+    const start = m.index + m[0].length;
+    const end = i + 1 < matches.length ? matches[i + 1].index : content.length;
+    const body = content.slice(start, end).trim();
+
+    const asuntoMatch = body.match(/\*?asunto\*?[:\*]*\s*([^\n\r]+)/i);
+    if (!asuntoMatch) continue;
+    const asunto = asuntoMatch[1].toLowerCase();
+    let tipo;
+    if (asunto.includes('recepci') || asunto.includes('recibe')) tipo = 'recepcion';
+    else if (asunto.includes('inicio') || asunto.includes('inici')) tipo = 'inicio';
+    else if (asunto.includes('final') || /\bfin\b/.test(asunto)) tipo = 'finalizacion';
+    else continue;
+
+    const sumarioMatch = body.match(/sumario\s+daypt[^\d]*(\d+\/\d+)/i);
+    events.push({
+      fecha: `${year}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`,
+      hora:  `${H.padStart(2, '0')}:${M}`,
+      sender: sender.trim(),
+      tipo,
+      sumario: sumarioMatch ? sumarioMatch[1] : null,
+      // NO guardamos carátulas.
+    });
+  }
+  return events;
+}
+
+const dedupeKey = (e) => `${e.fecha}|${e.hora}|${e.sender}|${e.tipo}|${e.sumario || ''}`;
+
+function mergeEvents(current, incoming) {
+  const seen = new Set(current.map(dedupeKey));
+  let added = 0, skipped = 0;
+  const merged = [...current];
+  for (const e of incoming) {
+    if (seen.has(dedupeKey(e))) { skipped++; continue; }
+    seen.add(dedupeKey(e));
+    merged.push(e);
+    added++;
+  }
+  merged.sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
+  return { events: merged, added, skipped };
+}
+
+/* ══════════════════════════════════════════════════════════
+   HELPERS
+   ══════════════════════════════════════════════════════════ */
+
+const iso = (d) => d.toISOString().slice(0, 10);
+const initials = (name) => {
+  const words = name.replace(/^(Ofl|Insp|Aux|aux|Subcrio|Inspector|Ofl My|Ofl 1ro|Crio)\s+/gi, '').trim().split(/\s+/);
+  return ((words[0]?.[0] || '') + (words[words.length - 1]?.[0] || '')).toUpperCase();
+};
+
+const SCORE = { inicio: 1, finalizacion: 2 };
+
+function computeAll(events, referenceDate) {
+  const peritoEv = events.filter((e) => e.tipo !== 'recepcion');
+  const judEv    = events.filter((e) => e.tipo === 'recepcion');
+  const peritoNames = [...new Set(peritoEv.map((e) => e.sender))];
+  const judNames = [...new Set(judEv.map((e) => e.sender))];
+
+  const today = referenceDate;
+  const hoyStr = iso(today);
+  const startOfMonth = iso(new Date(today.getFullYear(), today.getMonth(), 1));
+
+  const stats = peritoNames.map((name) => {
+    const mine = peritoEv.filter((e) => e.sender === name);
+    const mineMes = mine.filter((e) => e.fecha >= startOfMonth);
+    const inicios = mineMes.filter((e) => e.tipo === 'inicio').length;
+    const finals  = mineMes.filter((e) => e.tipo === 'finalizacion').length;
+    const hoy     = mine.filter((e) => e.fecha === hoyStr).length;
+    const puntos  = inicios * SCORE.inicio + finals * SCORE.finalizacion;
+    const sumariosUnicos = new Set(mineMes.map((e) => e.sumario).filter(Boolean)).size;
+
+    const dias = new Set(mine.map((e) => e.fecha));
+    let racha = 0;
+    const cursor = new Date(today);
+    while (dias.has(iso(cursor))) { racha++; cursor.setDate(cursor.getDate() - 1); }
+
+    const sortedDates = [...dias].sort();
+    let maxRacha = 0, curr = 0, prev = null;
+    sortedDates.forEach((f) => {
+      if (prev) {
+        const diff = Math.round((new Date(f) - new Date(prev)) / 86400000);
+        curr = diff === 1 ? curr + 1 : 1;
+      } else curr = 1;
+      maxRacha = Math.max(maxRacha, curr);
+      prev = f;
+    });
+
+    return { nombre: name, inicial: initials(name), inicios, finals, hoy, puntos, sumariosUnicos, racha, maxRacha };
+  }).sort((a, b) => b.puntos - a.puntos || b.finals - a.finals);
+
+  const judStats = judNames.map((name) => {
+    const mine = judEv.filter((e) => e.sender === name);
+    return {
+      nombre: name, inicial: initials(name),
+      mes: mine.filter((e) => e.fecha >= startOfMonth).length,
+      hoy: mine.filter((e) => e.fecha === hoyStr).length,
+      total: mine.length,
+    };
+  }).sort((a, b) => b.mes - a.mes);
+
+  const allDates = [...new Set(peritoEv.map((e) => e.fecha))].sort();
+  const daily = allDates.map((f) => {
+    const day = peritoEv.filter((e) => e.fecha === f);
+    const d = new Date(f + 'T12:00:00');
+    return {
+      fecha: f,
+      label: `${d.getDate()}/${d.getMonth() + 1}`,
+      inicios: day.filter((e) => e.tipo === 'inicio').length,
+      finals:  day.filter((e) => e.tipo === 'finalizacion').length,
+    };
+  });
+
+  const totalHoy = peritoEv.filter((e) => e.fecha === hoyStr).length;
+  const totalMes = peritoEv.filter((e) => e.fecha >= startOfMonth).length;
+  const rachaLider = stats.reduce((m, p) => (p.racha > (m?.racha || 0) ? p : m), stats[0]);
+  const recientes = [...peritoEv].sort((a, b) =>
+    (b.fecha + b.hora).localeCompare(a.fecha + a.hora)
+  ).slice(0, 10);
+
+  return { peritoEv, judEv, stats, judStats, daily, recientes, totalHoy, totalMes, rachaLider };
+}
+
+/* ══════════════════════════════════════════════════════════
+   TOKENS
+   ══════════════════════════════════════════════════════════ */
+
+const C = {
+  bg: '#100f0d', bgSoft: '#16140f',
+  card: '#1a1815', cardAlt: '#221f1a',
+  border: '#2b2721', borderHi: '#3d3730',
+  text: '#f4ebdb', textDim: '#b8aa93', mute: '#7a7163',
+  gold: '#d4a256', silver: '#b8b4ad', bronze: '#b87333',
+  crimson: '#c8383e', sage: '#9fab85', ink: '#1a1815', blue: '#7a9bb0',
+};
+const RANK_COLORS = [C.gold, C.silver, C.bronze, C.sage, C.textDim, C.mute, C.mute, C.mute, C.mute, C.mute, C.mute, C.mute];
+
+/* ══════════════════════════════════════════════════════════
+   ICONOS (SVG inline, sin dependencias)
+   ══════════════════════════════════════════════════════════ */
+
+const Svg = ({ size = 16, color, fill = 'none', sw = 2, children }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color || 'currentColor'}
+       strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+    {children}
+  </svg>
+);
+const Flame  = (p) => <Svg {...p}><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></Svg>;
+const Trophy = (p) => <Svg {...p}><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></Svg>;
+const Crown  = (p) => <Svg {...p}><path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"/><path d="M5 21h14"/></Svg>;
+const Play   = (p) => <Svg {...p}><polygon points="6 3 20 12 6 21 6 3"/></Svg>;
+const Check2 = (p) => <Svg {...p}><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></Svg>;
+const UpIcon = (p) => <Svg {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></Svg>;
+const DlIcon = (p) => <Svg {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></Svg>;
+const Reset  = (p) => <Svg {...p}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></Svg>;
+const CheckMk = (p) => <Svg {...p}><polyline points="20 6 9 17 4 12"/></Svg>;
+const Alert  = (p) => <Svg {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></Svg>;
+const XIcon  = (p) => <Svg {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Svg>;
+
+/* ══════════════════════════════════════════════════════════
+   CHART (SVG propio, sin recharts)
+   ══════════════════════════════════════════════════════════ */
+
+function StackedBars({ data, height = 260 }) {
+  const containerRef = useRef(null);
+  const [w, setW] = useState(800);
+  useEffect(() => {
+    const update = () => { if (containerRef.current) setW(containerRef.current.clientWidth); };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
+  const [hover, setHover] = useState(null);
+  const pad = { t: 10, r: 10, b: 30, l: 32 };
+  const chartW = Math.max(100, w - pad.l - pad.r);
+  const chartH = height - pad.t - pad.b;
+  const max = Math.max(1, ...data.map((d) => d.inicios + d.finals));
+  const step = Math.ceil(max / 4);
+  const niceMax = step * 4;
+  const slot = chartW / Math.max(1, data.length);
+  const barW = Math.min(40, slot * 0.72);
+
+  return (
+    <div ref={containerRef} style={{ width: '100%', position: 'relative' }}>
+      <svg width={w} height={height} style={{ display: 'block' }}>
+        {/* Grid + Y labels */}
+        {[0, 1, 2, 3, 4].map((i) => {
+          const val = (niceMax / 4) * i;
+          const y = pad.t + chartH - (chartH * i) / 4;
+          return (
+            <g key={i}>
+              <line x1={pad.l} y1={y} x2={w - pad.r} y2={y} stroke={C.border} />
+              <text x={pad.l - 6} y={y + 4} textAnchor="end" fontSize="10" fill={C.mute} fontFamily="JetBrains Mono, monospace">
+                {Math.round(val)}
+              </text>
+            </g>
+          );
+        })}
+        {/* Bars */}
+        {data.map((d, i) => {
+          const cx = pad.l + slot * (i + 0.5);
+          const x = cx - barW / 2;
+          const inicioH = (d.inicios / niceMax) * chartH;
+          const finalH  = (d.finals  / niceMax) * chartH;
+          const yIni = pad.t + chartH - inicioH;
+          const yFin = pad.t + chartH - inicioH - finalH;
+          const isH = hover === i;
+          return (
+            <g key={d.fecha}
+               onMouseEnter={() => setHover(i)}
+               onMouseLeave={() => setHover(null)}
+               style={{ cursor: 'default' }}>
+              <rect x={pad.l + slot * i} y={pad.t} width={slot} height={chartH} fill="transparent" />
+              {d.inicios > 0 && (
+                <rect x={x} y={yIni} width={barW} height={inicioH} fill={C.sage} opacity={isH ? 0.85 : 1} />
+              )}
+              {d.finals > 0 && (
+                <rect x={x} y={yFin} width={barW} height={finalH} fill={C.gold} opacity={isH ? 0.85 : 1} rx="2" ry="2" />
+              )}
+              <text x={cx} y={height - 8} textAnchor="middle" fontSize="10" fill={C.mute} fontFamily="JetBrains Mono, monospace">
+                {d.label}
+              </text>
+              {isH && (
+                <g>
+                  <rect x={cx - 45} y={yFin - 42} width="90" height="34" fill={C.ink} stroke={C.borderHi} rx="2" />
+                  <text x={cx} y={yFin - 27} textAnchor="middle" fontSize="10" fill={C.sage} fontFamily="JetBrains Mono, monospace">
+                    Inicios: {d.inicios}
+                  </text>
+                  <text x={cx} y={yFin - 15} textAnchor="middle" fontSize="10" fill={C.gold} fontFamily="JetBrains Mono, monospace">
+                    Finaliz: {d.finals}
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   COMPONENT
+   ══════════════════════════════════════════════════════════ */
+
+function TableroPeritos() {
+  const [events, setEvents] = useState(SEED_EVENTS);
+  const [meta, setMeta] = useState({ source: 'seed', importedAt: null, filename: null });
+  const [toast, setToast] = useState(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef(null);
+  const replaceInputRef = useRef(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length) setEvents(parsed);
+      }
+      const m = localStorage.getItem(STORAGE_META);
+      if (m) setMeta(JSON.parse(m));
+    } catch {}
+  }, []);
+
+  const showToast = (kind, text) => {
+    setToast({ kind, text });
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  const persist = (evs, newMeta) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(evs));
+      localStorage.setItem(STORAGE_META, JSON.stringify(newMeta));
+    } catch {}
+  };
+
+  const handleFile = useCallback(async (file, mode = 'merge') => {
+    if (!file) return;
+    if (!/\.txt$/i.test(file.name)) {
+      showToast('error', 'El archivo debe ser un .txt exportado de WhatsApp');
+      return;
+    }
+    try {
+      const text = await file.text();
+      const parsed = parseChatFile(text);
+      if (!parsed.length) {
+        showToast('error', 'No se encontraron mensajes con formato válido');
+        return;
+      }
+      let next, added, skipped;
+      if (mode === 'replace') {
+        next = parsed; added = parsed.length; skipped = 0;
+      } else {
+        const r = mergeEvents(events, parsed);
+        next = r.events; added = r.added; skipped = r.skipped;
+      }
+      const newMeta = { source: 'import', filename: file.name, importedAt: new Date().toISOString() };
+      setEvents(next);
+      setMeta(newMeta);
+      persist(next, newMeta);
+      setUploadOpen(false);
+      showToast('ok', `Importado: ${added} nuevos · ${skipped} ya existían`);
+    } catch (err) {
+      showToast('error', 'Error al leer el archivo: ' + err.message);
+    }
+  }, [events]);
+
+  const resetToSeed = () => {
+    setEvents(SEED_EVENTS);
+    const newMeta = { source: 'seed', importedAt: null, filename: null };
+    setMeta(newMeta);
+    persist(SEED_EVENTS, newMeta);
+    showToast('ok', 'Datos restaurados al archivo original');
+  };
+
+  const exportCSV = () => {
+    const header = ['fecha', 'hora', 'sender', 'tipo', 'sumario'];
+    const rows = events.map((e) =>
+      header.map((k) => {
+        const v = e[k] ?? '';
+        const s = String(v).replace(/"/g, '""');
+        return /[,"\n]/.test(s) ? `"${s}"` : s;
+      }).join(',')
+    );
+    const csv = [header.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pericias_${iso(new Date())}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const referenceDate = useMemo(() => {
+    if (!events.length) return new Date();
+    const maxFecha = events.reduce((m, e) => (e.fecha > m ? e.fecha : m), events[0].fecha);
+    return new Date(maxFecha + 'T23:59:59');
+  }, [events]);
+
+  const { peritoEv, judEv, stats, judStats, daily, recientes, totalHoy, totalMes, rachaLider } =
+    useMemo(() => computeAll(events, referenceDate), [events, referenceDate]);
+
+  const top3 = stats.slice(0, 3);
+  const fechaLarga = referenceDate.toLocaleDateString('es-AR', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  });
+  const rangoStr = events.length
+    ? `${events[0].fecha.split('-').reverse().slice(0, 2).join('/')} — ${events[events.length - 1].fecha.split('-').reverse().slice(0, 2).join('/')}`
+    : '—';
+
+  const fonts = {
+    serif: "'Instrument Serif', 'Times New Roman', serif",
+    sans:  "'Manrope', system-ui, sans-serif",
+    mono:  "'JetBrains Mono', ui-monospace, monospace",
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', background: `radial-gradient(ellipse at top left, ${C.bgSoft}, ${C.bg} 60%)`, color: C.text, fontFamily: fonts.sans }}>
+      <div className="grain" />
+
+      {/* TOAST */}
+      {toast && (
+        <div
+          className="fixed left-1/2 top-6 z-50 flex -translate-x-1/2 items-center gap-2 rounded-sm border px-4 py-2 text-sm shadow-lg"
+          style={{
+            background: toast.kind === 'ok' ? C.card : '#2a1414',
+            borderColor: toast.kind === 'ok' ? C.sage : C.crimson,
+            color: C.text, fontFamily: fonts.mono,
+          }}
+        >
+          {toast.kind === 'ok'
+            ? <CheckMk size={14} color={C.sage} />
+            : <Alert size={14} color={C.crimson} />}
+          {toast.text}
+        </div>
+      )}
+
+      {/* UPLOAD MODAL */}
+      {uploadOpen && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center p-6"
+          style={{ background: '#000c' }}
+          onClick={() => setUploadOpen(false)}
+        >
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-xl rounded-sm border p-8"
+               style={{ background: C.card, borderColor: C.borderHi }}>
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.28em]" style={{ color: C.mute, fontFamily: fonts.mono }}>
+                  Actualizar tablero
+                </div>
+                <h3 style={{ fontFamily: fonts.serif, fontSize: '2.2rem', lineHeight: 1.1, color: C.text }}>
+                  Importar chat de WhatsApp
+                </h3>
+              </div>
+              <button onClick={() => setUploadOpen(false)} className="rounded-sm p-1 hover:bg-white/5" style={{ color: C.mute }}>
+                <XIcon size={18} />
+              </button>
+            </div>
+
+            <p className="mt-3 text-sm" style={{ color: C.textDim }}>
+              En WhatsApp abrí el grupo → tocá el nombre arriba → <b>Exportar chat</b> → <b>Sin archivos adjuntos</b>. Subí acá el <span style={{ fontFamily: fonts.mono, color: C.gold }}>_chat.txt</span>.
+            </p>
+            <p className="mt-2 text-xs" style={{ color: C.mute, fontFamily: fonts.mono }}>
+              Solo se guarda en <b>este navegador</b> (no se sube a ningún servidor).
+            </p>
+
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f, 'merge'); }}
+              onClick={() => fileInputRef.current?.click()}
+              className="mt-6 cursor-pointer rounded-sm border-2 border-dashed px-6 py-10 text-center transition-colors"
+              style={{ borderColor: dragOver ? C.gold : C.borderHi, background: dragOver ? `${C.gold}11` : 'transparent' }}
+            >
+              <div style={{ color: dragOver ? C.gold : C.textDim }}>
+                <UpIcon size={28} />
+              </div>
+              <div className="mt-3" style={{ color: C.text, fontSize: 14 }}>
+                Arrastrá el archivo o <span style={{ color: C.gold, textDecoration: 'underline' }}>hacé click</span>
+              </div>
+              <div className="mt-1 text-xs" style={{ color: C.mute, fontFamily: fonts.mono }}>
+                .txt · formato iOS/Android en español
+              </div>
+              <input ref={fileInputRef} type="file" accept=".txt,text/plain" className="hidden"
+                     onChange={(e) => handleFile(e.target.files?.[0], 'merge')} />
+            </div>
+
+            <div className="mt-4 text-xs" style={{ color: C.mute, fontFamily: fonts.mono, lineHeight: 1.6 }}>
+              Por defecto <span style={{ color: C.sage }}>agrega sin duplicar</span>.{' '}
+              <button onClick={() => replaceInputRef.current?.click()} className="underline" style={{ color: C.crimson }}>
+                reemplazar todo en lugar de agregar
+              </button>
+              <input ref={replaceInputRef} type="file" accept=".txt,text/plain" className="hidden"
+                     onChange={(e) => handleFile(e.target.files?.[0], 'replace')} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="relative mx-auto max-w-[1400px] px-6 py-10 md:px-12 md:py-14">
+
+        {/* HEADER */}
+        <header className="mb-12 border-b pb-8" style={{ borderColor: C.border }}>
+          <div className="flex flex-wrap items-end justify-between gap-6">
+            <div>
+              <div className="mb-2 text-[11px] uppercase tracking-[0.28em]" style={{ color: C.mute, fontFamily: fonts.mono }}>
+                División Análisis y Pericias Tecnológicas · tablero interno
+              </div>
+              <h1 className="leading-[0.92]" style={{ fontFamily: fonts.serif, fontSize: 'clamp(2.8rem, 6vw, 5.2rem)', letterSpacing: '-0.02em' }}>
+                Tablero de <em style={{ color: C.gold }}>Peritos</em>
+              </h1>
+              <p className="mt-3 max-w-xl text-sm" style={{ color: C.textDim }}>
+                Inicios y finalizaciones reportados al grupo. Las recepciones de material van en un panel aparte. No se almacenan carátulas ni nombres de causas.
+              </p>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                <button onClick={() => setUploadOpen(true)}
+                        className="inline-flex items-center gap-2 rounded-sm border px-3 py-2 text-xs uppercase tracking-[0.15em]"
+                        style={{ background: C.gold, borderColor: C.gold, color: C.ink, fontFamily: fonts.mono, fontWeight: 600 }}>
+                  <UpIcon size={13} color={C.ink} />
+                  Importar chat
+                </button>
+                <button onClick={exportCSV}
+                        className="inline-flex items-center gap-2 rounded-sm border px-3 py-2 text-xs uppercase tracking-[0.15em] hover:bg-white/5"
+                        style={{ borderColor: C.border, color: C.textDim, fontFamily: fonts.mono }}>
+                  <DlIcon size={13} />
+                  Exportar CSV
+                </button>
+                {meta.source === 'import' && (
+                  <button onClick={resetToSeed}
+                          className="inline-flex items-center gap-2 rounded-sm border px-3 py-2 text-xs uppercase tracking-[0.15em] hover:bg-white/5"
+                          style={{ borderColor: C.border, color: C.mute, fontFamily: fonts.mono }}>
+                    <Reset size={12} />
+                    Restaurar original
+                  </button>
+                )}
+              </div>
+
+              <div className="mt-3 text-[10px] uppercase tracking-[0.2em]" style={{ color: C.mute, fontFamily: fonts.mono }}>
+                {events.length} eventos · {rangoStr}
+                {meta.filename && <> · importado: {meta.filename}</>}
+                {meta.importedAt && <> · {new Date(meta.importedAt).toLocaleString('es-AR')}</>}
+              </div>
+            </div>
+
+            <div className="text-right">
+              <div className="text-xs uppercase tracking-[0.2em]" style={{ color: C.mute, fontFamily: fonts.mono }}>
+                {fechaLarga}
+              </div>
+              <div className="mt-2 flex items-center justify-end gap-6">
+                <Kpi label="Eventos hoy"   value={totalHoy} color={C.gold} font={fonts} />
+                <Kpi label="Eventos mes"   value={totalMes} color={C.text} font={fonts} />
+                <Kpi label={`🔥 racha ${rachaLider?.inicial || '—'}`} value={rachaLider?.racha || 0} color={C.crimson} font={fonts} />
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {stats.length === 0 ? (
+          <div className="py-20 text-center" style={{ color: C.mute }}>
+            No hay datos. Importá un chat de WhatsApp para empezar.
+          </div>
+        ) : (
+        <React.Fragment>
+
+        {/* PODIO */}
+        <section className="mb-12">
+          <SectionTitle font={fonts} sup="01" title="Podio del mes" hint="Inicio · 1 pt   │   Finalización · 2 pts" />
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+            {[1, 0, 2].map((order) => {
+              const p = top3[order]; if (!p) return null;
+              const rank = order + 1;
+              const medalColor = RANK_COLORS[order];
+              const heights = [220, 260, 200];
+              return (
+                <div key={p.nombre}
+                  className="relative flex flex-col justify-end rounded-sm border p-6 transition-transform hover:-translate-y-1"
+                  style={{
+                    background: order === 0 ? `linear-gradient(180deg, ${C.cardAlt} 0%, ${C.card} 100%)` : C.card,
+                    borderColor: order === 0 ? C.gold : C.border,
+                    minHeight: heights[order],
+                    boxShadow: order === 0 ? `0 0 0 1px ${C.gold}30, 0 20px 60px -30px ${C.gold}60` : 'none',
+                  }}>
+                  <div className="mb-4 flex items-center justify-between">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full" style={{ background: medalColor, color: C.ink }}>
+                      {order === 0 ? <Crown size={16} color={C.ink} sw={2.2} /> : <Trophy size={14} color={C.ink} sw={2.2} />}
+                    </div>
+                    <div className="text-xs uppercase tracking-[0.2em]" style={{ color: C.mute, fontFamily: fonts.mono }}>#{rank}</div>
+                  </div>
+                  <div className="leading-[0.95]" style={{
+                    fontFamily: fonts.serif,
+                    fontSize: order === 0 ? 'clamp(1.8rem, 3.2vw, 2.4rem)' : 'clamp(1.4rem, 2.6vw, 1.9rem)',
+                    color: C.text,
+                  }}>
+                    {p.nombre}
+                  </div>
+                  <div className="mt-5 flex items-end justify-between border-t pt-4" style={{ borderColor: C.border }}>
+                    <div>
+                      <div style={{ fontFamily: fonts.mono, fontWeight: 700, fontSize: order === 0 ? '2.5rem' : '2rem', color: medalColor, lineHeight: 1 }}>
+                        {p.puntos}
+                      </div>
+                      <div className="mt-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: C.mute }}>puntos</div>
+                    </div>
+                    <div className="text-right">
+                      <div style={{ fontFamily: fonts.mono, color: C.textDim, fontSize: 13 }}>
+                        <span style={{ color: C.sage }}>{p.inicios}</span><span style={{ color: C.mute }}>i</span>
+                        {' · '}
+                        <span style={{ color: C.gold }}>{p.finals}</span><span style={{ color: C.mute }}>f</span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-end gap-1" style={{ color: C.crimson, fontFamily: fonts.mono }}>
+                        <Flame size={12} color={C.crimson} fill={p.racha > 0 ? C.crimson : 'none'} />
+                        <span className="text-sm">{p.racha}d</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* CLASIFICACIÓN + HOY */}
+        <section className="mb-12 grid grid-cols-1 gap-6 lg:grid-cols-5">
+          <div className="lg:col-span-3">
+            <SectionTitle font={fonts} sup="02" title="Clasificación general" hint={`${stats.length} peritos activos`} />
+            <div className="overflow-hidden rounded-sm border" style={{ borderColor: C.border, background: C.card }}>
+              <table className="w-full text-sm" style={{ fontFamily: fonts.sans }}>
+                <thead>
+                  <tr style={{ background: C.bgSoft, color: C.mute }}>
+                    {['#', 'Perito', 'Hoy', 'Inic.', 'Final.', 'Únicas', 'Racha', 'Pts'].map((h) => (
+                      <th key={h} className="px-3 py-3 text-left text-[10px] font-medium uppercase tracking-[0.18em]" style={{ fontFamily: fonts.mono }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.map((p, i) => {
+                    const color = RANK_COLORS[i] || C.mute;
+                    return (
+                      <tr key={p.nombre} className="border-t transition-colors hover:bg-white/[0.02]" style={{ borderColor: C.border }}>
+                        <td className="px-3 py-3">
+                          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold"
+                            style={{
+                              background: i < 3 ? color : 'transparent',
+                              color: i < 3 ? C.ink : C.textDim,
+                              border: i < 3 ? 'none' : `1px solid ${C.border}`,
+                              fontFamily: fonts.mono,
+                            }}>
+                            {i + 1}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                                 style={{ background: `${color}22`, color, border: `1px solid ${color}55`, fontFamily: fonts.mono }}>
+                              {p.inicial}
+                            </div>
+                            <div style={{ color: C.text, fontWeight: 500, fontSize: 13 }}>{p.nombre}</div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3" style={{ fontFamily: fonts.mono }}>
+                          <span style={{ color: p.hoy > 0 ? C.text : C.mute, fontWeight: p.hoy > 0 ? 600 : 400 }}>{p.hoy}</span>
+                        </td>
+                        <td className="px-3 py-3" style={{ fontFamily: fonts.mono, color: C.sage }}>{p.inicios}</td>
+                        <td className="px-3 py-3" style={{ fontFamily: fonts.mono, color: C.gold }}>{p.finals}</td>
+                        <td className="px-3 py-3" style={{ fontFamily: fonts.mono, color: C.textDim }}>{p.sumariosUnicos}</td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-1.5">
+                            <Flame size={13} color={p.racha >= 2 ? C.crimson : C.mute} fill={p.racha >= 2 ? C.crimson : 'none'} />
+                            <span style={{ fontFamily: fonts.mono, color: p.racha >= 2 ? C.crimson : C.textDim, fontWeight: p.racha >= 2 ? 700 : 400 }}>
+                              {p.racha}d
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span style={{ fontFamily: fonts.serif, fontSize: '1.5rem', color, lineHeight: 1 }}>{p.puntos}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-3 flex gap-5 text-[11px] uppercase tracking-[0.15em]" style={{ color: C.mute, fontFamily: fonts.mono }}>
+              <span>Inic. · pericias iniciadas</span>
+              <span>Final. · finalizaciones</span>
+              <span>Únicas · sumarios distintos</span>
+            </div>
+          </div>
+
+          <div className="lg:col-span-2">
+            <SectionTitle font={fonts} sup="03" title="Hoy" hint="Última jornada con actividad" />
+            <div className="rounded-sm border p-6" style={{ borderColor: C.border, background: C.card }}>
+              <div className="mb-6 flex items-baseline justify-between">
+                <div style={{ fontFamily: fonts.serif, fontSize: '4.5rem', lineHeight: 1, color: C.gold }}>
+                  {totalHoy}
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: C.mute, fontFamily: fonts.mono }}>
+                    eventos del equipo
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {stats.filter((p) => p.hoy > 0).length === 0 ? (
+                  <div className="py-4 text-center text-sm" style={{ color: C.mute }}>Sin actividad registrada</div>
+                ) : (
+                  stats.filter((p) => p.hoy > 0).sort((a, b) => b.hoy - a.hoy).map((p, i) => {
+                    const refIso = iso(referenceDate);
+                    const pInicios = peritoEv.filter(e => e.fecha === refIso && e.sender === p.nombre && e.tipo === 'inicio').length;
+                    const pFinals  = peritoEv.filter(e => e.fecha === refIso && e.sender === p.nombre && e.tipo === 'finalizacion').length;
+                    return (
+                      <div key={p.nombre} className="flex items-center gap-3">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
+                             style={{ background: `${RANK_COLORS[i]}22`, color: RANK_COLORS[i], border: `1px solid ${RANK_COLORS[i]}55`, fontFamily: fonts.mono }}>
+                          {p.inicial}
+                        </div>
+                        <div className="min-w-0 flex-1 truncate text-sm" style={{ color: C.text }}>{p.nombre}</div>
+                        <div className="flex items-center gap-2 text-xs" style={{ fontFamily: fonts.mono }}>
+                          {pInicios > 0 && (
+                            <span className="flex items-center gap-0.5" style={{ color: C.sage }}>
+                              <Play size={10} color={C.sage} fill={C.sage} /> {pInicios}
+                            </span>
+                          )}
+                          {pFinals > 0 && (
+                            <span className="flex items-center gap-0.5" style={{ color: C.gold }}>
+                              <Check2 size={10} color={C.gold} /> {pFinals}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ACTIVIDAD DIARIA */}
+        <section className="mb-12">
+          <SectionTitle font={fonts} sup="04" title="Actividad por día" hint={`${daily.length} días con reportes`} />
+          <div className="rounded-sm border p-6" style={{ borderColor: C.border, background: C.card }}>
+            <StackedBars data={daily} />
+            <div className="mt-4 flex gap-5 border-t pt-4 text-xs" style={{ borderColor: C.border, color: C.textDim, fontFamily: fonts.mono }}>
+              <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: C.sage }} />Inicios</span>
+              <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: C.gold }} />Finalizaciones</span>
+            </div>
+          </div>
+        </section>
+
+        {/* RECIENTES + JUDICIALES */}
+        <section className="mb-16 grid grid-cols-1 gap-6 lg:grid-cols-5">
+          <div className="lg:col-span-3">
+            <SectionTitle font={fonts} sup="05" title="Últimos eventos" hint="Sin datos de la causa" />
+            <div className="rounded-sm border" style={{ borderColor: C.border, background: C.card }}>
+              {recientes.length === 0 ? (
+                <div className="p-6 text-center text-sm" style={{ color: C.mute }}>Sin eventos</div>
+              ) : recientes.map((e, i) => {
+                const color = e.tipo === 'inicio' ? C.sage : C.gold;
+                return (
+                  <div key={i} className="flex items-start gap-4 border-b p-4 last:border-b-0" style={{ borderColor: C.border }}>
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                         style={{ background: `${color}22`, border: `1px solid ${color}55` }}>
+                      {e.tipo === 'inicio'
+                        ? <Play size={14} color={color} fill={color} />
+                        : <Check2 size={14} color={color} />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <span className="text-sm font-medium" style={{ color: C.text }}>{e.sender}</span>
+                        <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color, fontFamily: fonts.mono }}>
+                          {e.tipo}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 flex gap-3 text-[10px]" style={{ color: C.mute, fontFamily: fonts.mono }}>
+                        <span>{e.fecha.split('-').reverse().join('/')} · {e.hora}</span>
+                        {e.sumario && <span>SUM {e.sumario}</span>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="lg:col-span-2">
+            <SectionTitle font={fonts} sup="06" title="Judiciales · recepción" hint="Material recibido" />
+            <div className="rounded-sm border p-6" style={{ borderColor: C.border, background: C.card }}>
+              <div className="mb-5 flex items-baseline justify-between border-b pb-4" style={{ borderColor: C.border }}>
+                <div>
+                  <div style={{ fontFamily: fonts.serif, fontSize: '3rem', lineHeight: 1, color: C.blue }}>
+                    {judEv.length}
+                  </div>
+                  <div className="mt-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: C.mute, fontFamily: fonts.mono }}>
+                    recepciones totales
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div style={{ fontFamily: fonts.mono, color: C.textDim, fontSize: 14 }}>
+                    {judStats.reduce((s, j) => s + j.mes, 0)} <span style={{ color: C.mute, fontSize: 11 }}>mes</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {judStats.length === 0 ? (
+                  <div className="py-4 text-center text-sm" style={{ color: C.mute }}>Sin recepciones</div>
+                ) : judStats.map((j) => {
+                  const maxMes = Math.max(1, judStats[0].mes);
+                  const pct = (j.mes / maxMes) * 100;
+                  return (
+                    <div key={j.nombre}>
+                      <div className="mb-1 flex items-baseline justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold"
+                               style={{ background: `${C.blue}22`, color: C.blue, border: `1px solid ${C.blue}55`, fontFamily: fonts.mono }}>
+                            {j.inicial}
+                          </div>
+                          <span style={{ color: C.text, fontSize: 13 }}>{j.nombre}</span>
+                        </div>
+                        <span style={{ fontFamily: fonts.mono, color: C.text, fontSize: 13 }}>
+                          {j.mes}
+                          {j.hoy > 0 && <span style={{ color: C.gold }}> · hoy +{j.hoy}</span>}
+                        </span>
+                      </div>
+                      <div className="h-1.5 overflow-hidden rounded-sm" style={{ background: C.bgSoft }}>
+                        <div className="h-full transition-all" style={{ width: `${pct}%`, background: C.blue }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-5 border-t pt-4 text-[11px]" style={{ borderColor: C.border, color: C.mute, fontFamily: fonts.mono }}>
+                No cuentan en el ranking de peritos.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        </React.Fragment>)}
+
+        <footer className="mt-12 flex flex-wrap items-center justify-between gap-4 border-t pt-6 text-xs"
+                style={{ borderColor: C.border, color: C.mute, fontFamily: fonts.mono }}>
+          <span className="uppercase tracking-[0.2em]">
+            Fuente: {meta.source === 'import' ? 'chat importado' : 'datos originales'} · {events.length} eventos
+          </span>
+          <span className="uppercase tracking-[0.2em]">Tablero generado · {GENERATED_AT}</span>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function Kpi({ label, value, color, font }) {
+  return (
+    <div className="text-right">
+      <div style={{ fontFamily: font.serif, fontSize: '2.2rem', lineHeight: 1, color }}>{value}</div>
+      <div className="mt-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: '#7a7163', fontFamily: font.mono }}>
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function SectionTitle({ font, sup, title, hint }) {
+  return (
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+      <div className="flex items-baseline gap-4">
+        <span className="text-xs uppercase tracking-[0.28em]" style={{ color: '#7a7163', fontFamily: font.mono }}>{sup}</span>
+        <h2 style={{ fontFamily: font.serif, fontSize: '1.9rem', letterSpacing: '-0.01em', color: '#f4ebdb', lineHeight: 1 }}>
+          {title}
+        </h2>
+      </div>
+      {hint && (
+        <span className="text-[11px] uppercase tracking-[0.18em]" style={{ color: '#7a7163', fontFamily: font.mono }}>
+          {hint}
+        </span>
+      )}
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<TableroPeritos />);
+</script>
+</body>
+</html>

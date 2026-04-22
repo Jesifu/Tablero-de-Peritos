@@ -1,0 +1,70 @@
+# Tablero de Peritos — DAYPT
+
+Tablero interno para visualizar la actividad de pericias reportadas al grupo de WhatsApp.
+
+## Archivos
+
+| Archivo                     | Qué es                                                                 |
+| --------------------------- | ---------------------------------------------------------------------- |
+| `tablero.html`              | **El tablero**. Copiar a la carpeta compartida. Todos abren este.      |
+| `tablero.template.html`     | Plantilla base (no modificar). Se combina con el chat al regenerar.    |
+| `actualizar_tablero.py`     | Script para regenerar el HTML con un export nuevo del chat.            |
+
+## Qué guarda y qué NO
+
+**Sí guarda:** fecha, hora, autor del mensaje, tipo (inicio/finalización/recepción), número de sumario DAYPT.
+
+**No guarda:** carátulas de causas, nombres de imputados o víctimas, reseñas del hecho. El parser descarta esta información directamente — nunca entra al archivo HTML.
+
+## Dónde ponerlo
+
+Copiar `tablero.html` a una carpeta de red compartida del área. Cada perito lo abre con doble click desde su navegador. No requiere instalación, servidor, ni base de datos.
+
+Primera apertura necesita internet (carga React, Tailwind y tipografías desde CDN; después quedan en caché del navegador).
+
+## Cómo actualizar los datos
+
+Cada semana (o cuando corresponda):
+
+**1. Exportar el chat desde WhatsApp**
+
+En el celular: abrir grupo → tocar el nombre arriba → Exportar chat → **Sin archivos adjuntos**.
+Se recibe un archivo `_chat.txt` por mail o por transferencia interna.
+
+**2. Regenerar el HTML**
+
+En una PC con Python 3:
+```
+python3 actualizar_tablero.py _chat.txt
+```
+
+El script imprime un resumen:
+```
+✔ Tablero regenerado: tablero.html
+  Eventos totales : 76
+  Inicios         : 27
+  Finalizaciones  : 20
+  Recepciones     : 29
+  Peritos         : 11
+  Judiciales      : 4
+  Rango de fechas : 2026-03-17  →  2026-04-21
+```
+
+**3. Reemplazar el archivo en la carpeta compartida.**
+
+Listo. La próxima vez que cualquier perito abra el tablero, ve los datos nuevos.
+
+## Opción alternativa: carga desde el tablero
+
+Cada usuario también puede importar un chat desde el mismo tablero (botón "Importar chat"), pero queda guardado **solo en su navegador** — no en el archivo compartido. Útil para vistas personales o pruebas, no para la versión oficial del equipo.
+
+## Consideraciones operativas
+
+- **Mensajes temporales de 7 días** están activos en el grupo. Si no se exporta al menos semanalmente, se pierden mensajes. Conviene fijar una rutina.
+- **Duplicación:** el parser y la carga desde el tablero deduplican por `fecha + hora + autor + tipo + sumario`, así que se pueden superponer exports sin problema.
+- **Formato:** el parser está probado con export iOS en español. Si aparece formato Android (sin corchetes, con guión), avisar para ajustar el regex.
+- **Fórmula de puntaje:** inicio = 1 pt, finalización = 2 pts. Se puede modificar en `actualizar_tablero.py` y en la plantilla si se quiere dar más peso a cerrar pericias.
+
+## Reglas para una competencia sana
+
+Sugerencia: que el criterio sea público desde el día uno. Si todos saben que finalizar vale el doble que iniciar, nadie va a abrir pericias vacías para inflar número. El panel de "sumarios únicos" también ayuda a detectar duplicaciones si alguien reporta el mismo sumario varias veces.
