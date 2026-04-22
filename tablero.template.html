@@ -106,38 +106,31 @@ const initials = (name) => {
 const SCORE = { inicio: 1, finalizacion: 2 };
 
 function computeAll(events, referenceDate) {
-  const peritoEv = events.filter((e) => e.tipo !== 'recepcion');
-  const judEv    = events.filter((e) => e.tipo === 'recepcion');
-  const peritoNames = [...new Set(peritoEv.map((e) => e.sender))];
-  const judNames = [...new Set(judEv.map((e) => e.sender))];
-
-  const today = referenceDate;
-  const hoyStr = iso(today);
-  const startOfMonth = iso(new Date(today.getFullYear(), today.getMonth(), 1));
-
-  const stats = peritoNames.map((name) => {
+  // Dentro de la función computeAll(events, referenceDate):
+const stats = peritoNames.map((name) => {
     const mine = peritoEv.filter((e) => e.sender === name);
     const mineMes = mine.filter((e) => e.fecha >= startOfMonth);
+    
     const inicios = mineMes.filter((e) => e.tipo === 'inicio').length;
-    const finals  = mineMes.filter((e) => e.tipo === 'finalizacion').length;
-    const hoy     = mine.filter((e) => e.fecha === hoyStr).length;
-    const puntos  = inicios * SCORE.inicio + finals * SCORE.finalizacion;
+    const finals  = mineMes.filter((e) => e.tipo === 'finalizacion');
+    
+    // Suma de dispositivos solo en los mensajes de finalización
+    const dispFinalizados = finals.reduce((acc, e) => acc + (e.dispositivos || 1), 0);
+    
+    // Nuevo Puntaje: Inicio(1) + Cierre(1) + Disp(1)
+    const puntos = (inicios * 1) + (finals.length * 1) + (dispFinalizados * 1);
     const sumariosUnicos = new Set(mineMes.map((e) => e.sumario).filter(Boolean)).size;
 
-    const dias = new Set(mine.map((e) => e.fecha));
-    let racha = 0;
-    const cursor = new Date(today);
-    while (dias.has(iso(cursor))) { racha++; cursor.setDate(cursor.getDate() - 1); }
-
-    const sortedDates = [...dias].sort();
-    let maxRacha = 0, curr = 0, prev = null;
-    sortedDates.forEach((f) => {
-      if (prev) {
-        const diff = Math.round((new Date(f) - new Date(prev)) / 86400000);
-        curr = diff === 1 ? curr + 1 : 1;
-      } else curr = 1;
-      maxRacha = Math.max(maxRacha, curr);
-      prev = f;
+    return { 
+        nombre: name, 
+        puntos, 
+        inicios, 
+        finals: finals.length, 
+        dispositivos: dispFinalizados, // <--- Nueva columna
+        sumariosUnicos 
+        // ... racha y demás
+    };
+});
     });
 
     return { nombre: name, inicial: initials(name), inicios, finals, hoy, puntos, sumariosUnicos, racha, maxRacha };
