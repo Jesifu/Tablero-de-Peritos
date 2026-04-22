@@ -32,7 +32,7 @@ const { useState, useEffect, useRef, useCallback, useMemo } = React;
    ══════════════════════════════════════════════════════════ */
 
 const SEED_EVENTS = [{"fecha":"2026-03-17","hora":"17:16","sender":"Gonzalo Abraldes","tipo":"inicio","sumario":"169575/2026","dispositivos":1},{"fecha":"2026-03-27","hora":"16:04","sender":"Cristian Navarro","tipo":"recepcion","sumario":"193763/2026","dispositivos":2},{"fecha":"2026-04-15","hora":"09:15","sender":"Flavia Romero","tipo":"inicio","sumario":"214429/2026","dispositivos":1},{"fecha":"2026-04-15","hora":"10:51","sender":"Oscar Cussit","tipo":"finalizacion","sumario":"220193/2026","dispositivos":2},{"fecha":"2026-04-15","hora":"11:59","sender":"Viviana De Francesco","tipo":"recepcion","sumario":"234886/2026","dispositivos":2},{"fecha":"2026-04-15","hora":"13:57","sender":"Viviana De Francesco","tipo":"recepcion","sumario":"234994/2026","dispositivos":1},{"fecha":"2026-04-15","hora":"15:30","sender":"Alejandro Capellini","tipo":"inicio","sumario":"232154/2026","dispositivos":1},{"fecha":"2026-04-15","hora":"16:07","sender":"Viviana De Francesco","tipo":"recepcion","sumario":"235442/2026","dispositivos":8},{"fecha":"2026-04-15","hora":"16:39","sender":"Inspector Nazareno Avalos","tipo":"recepcion","sumario":"235674/2026","dispositivos":1},{"fecha":"2026-04-15","hora":"17:54","sender":"Alejandro Capellini","tipo":"finalizacion","sumario":"232154/2026","dispositivos":1},{"fecha":"2026-04-15","hora":"18:03","sender":"Oscar Cussit","tipo":"inicio","sumario":"220779/2026","dispositivos":2},{"fecha":"2026-04-15","hora":"18:11","sender":"Inspector Nazareno Avalos","tipo":"recepcion","sumario":"235950/2026","dispositivos":1},{"fecha":"2026-04-16","hora":"12:32","sender":"Santiago Pociello","tipo":"inicio","sumario":"220856/2026","dispositivos":4},{"fecha":"2026-04-16","hora":"12:47","sender":"Karen Trepowski","tipo":"finalizacion","sumario":"175297/2026","dispositivos":6},{"fecha":"2026-04-16","hora":"12:49","sender":"Guido Orellana","tipo":"finalizacion","sumario":"174965/2026","dispositivos":8},{"fecha":"2026-04-16","hora":"12:50","sender":"Walter Ponce","tipo":"inicio","sumario":"233591/2026","dispositivos":2},{"fecha":"2026-04-16","hora":"12:54","sender":"Walter Ponce","tipo":"inicio","sumario":"175080/2026","dispositivos":1},{"fecha":"2026-04-16","hora":"13:15","sender":"Cristian Navarro","tipo":"recepcion","sumario":"237533/2026","dispositivos":2},{"fecha":"2026-04-16","hora":"13:29","sender":"Cristian Navarro","tipo":"recepcion","sumario":"237607/2026","dispositivos":2},{"fecha":"2026-04-16","hora":"15:05","sender":"Cristian Navarro","tipo":"recepcion","sumario":"237871/2026","dispositivos":1},{"fecha":"2026-04-16","hora":"15:47","sender":"Cristian Navarro","tipo":"recepcion","sumario":"238025/2026","dispositivos":3},{"fecha":"2026-04-16","hora":"16:44","sender":"Karen Trepowski","tipo":"inicio","sumario":"237871/2026","dispositivos":1},{"fecha":"2026-04-16","hora":"17:33","sender":"Guido Orellana","tipo":"finalizacion","sumario":"213633/2026","dispositivos":2},{"fecha":"2026-04-16","hora":"18:10","sender":"Guido Orellana","tipo":"inicio","sumario":"237533/2026","dispositivos":2},{"fecha":"2026-04-16","hora":"19:05","sender":"Karen Trepowski","tipo":"finalizacion","sumario":"237871/2026","dispositivos":1},{"fecha":"2026-04-17","hora":"09:37","sender":"Santiago Pociello","tipo":"finalizacion","sumario":"220856/2026","dispositivos":4},{"fecha":"2026-04-17","hora":"09:44","sender":"Oscar Cussit","tipo":"finalizacion","sumario":"220779/2026","dispositivos":2},{"fecha":"2026-04-17","hora":"09:47","sender":"Oscar Cussit","tipo":"inicio","sumario":"229678/2026","dispositivos":4},{"fecha":"2026-04-17","hora":"10:24","sender":"Santiago Pociello","tipo":"inicio","sumario":"230278/2026","dispositivos":4},{"fecha":"2026-04-17","hora":"14:51","sender":"Evelyn Ramos","tipo":"finalizacion","sumario":"235674/2026","dispositivos":1},{"fecha":"2026-04-17","hora":"16:08","sender":"Inspector Nazareno Avalos","tipo":"recepcion","sumario":"241122/2026","dispositivos":3},{"fecha":"2026-04-17","hora":"16:09","sender":"Viviana De Francesco","tipo":"recepcion","sumario":"241132/2026","dispositivos":8},{"fecha":"2026-04-17","hora":"16:28","sender":"Viviana De Francesco","tipo":"recepcion","sumario":"241261/2026","dispositivos":1},{"fecha":"2026-04-17","hora":"16:52","sender":"Inspector Nazareno Avalos","tipo":"recepcion","sumario":"241284/2026","dispositivos":3},{"fecha":"2026-04-17","hora":"17:01","sender":"Viviana De Francesco","tipo":"recepcion","sumario":"241327/2026","dispositivos":4},{"fecha":"2026-04-17","hora":"17:58","sender":"Juan Manuel Gonzalez","tipo":"recepcion","sumario":"241492/2026","dispositivos":1},{"fecha":"2026-04-17","hora":"18:55","sender":"Inspector Nazareno Avalos","tipo":"recepcion","sumario":"241729/2026","dispositivos":6},{"fecha":"2026-04-17","hora":"19:01","sender":"Oscar Cussit","tipo":"inicio","sumario":"191404/2026","dispositivos":0},{"fecha":"2026-04-20","hora":"09:17","sender":"Guido Orellana","tipo":"finalizacion","sumario":"237533/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"09:30","sender":"Horacio Lopez","tipo":"inicio","sumario":"237607/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"09:49","sender":"Karen Trepowski","tipo":"finalizacion","sumario":"233540/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"10:47","sender":"Cristian Navarro","tipo":"recepcion","sumario":"247243/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"10:57","sender":"Guido Orellana","tipo":"finalizacion","sumario":"241492/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"12:15","sender":"Cristian Navarro","tipo":"recepcion","sumario":"247492/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"12:22","sender":"Guido Orellana","tipo":"inicio","sumario":"247243/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"13:26","sender":"Karen Trepowski","tipo":"finalizacion","sumario":"232880/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"14:04","sender":"Guido Orellana","tipo":"inicio","sumario":"247243/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"14:31","sender":"Karen Trepowski","tipo":"inicio","sumario":"230060/2026","dispositivos":4},{"fecha":"2026-04-20","hora":"14:39","sender":"Horacio Lopez","tipo":"finalizacion","sumario":"140916/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"14:43","sender":"Horacio Lopez","tipo":"finalizacion","sumario":"237607/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"15:00","sender":"Horacio Lopez","tipo":"inicio","sumario":"220313/2026","dispositivos":4},{"fecha":"2026-04-20","hora":"15:09","sender":"Walter Ponce","tipo":"inicio","sumario":"238025/2026","dispositivos":3},{"fecha":"2026-04-20","hora":"15:50","sender":"Cristian Navarro","tipo":"recepcion","sumario":"248189/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"16:04","sender":"Cristian Navarro","tipo":"recepcion","sumario":"248213/2026","dispositivos":5},{"fecha":"2026-04-20","hora":"16:48","sender":"Guido Orellana","tipo":"finalizacion","sumario":"85170/2026","dispositivos":3},{"fecha":"2026-04-20","hora":"16:49","sender":"Karen Trepowski","tipo":"inicio","sumario":"248189/2026","dispositivos":1},{"fecha":"2026-04-20","hora":"18:04","sender":"Cristian Navarro","tipo":"recepcion","sumario":"248559/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"18:42","sender":"Karen Trepowski","tipo":"inicio","sumario":"248550/2026","dispositivos":2},{"fecha":"2026-04-20","hora":"18:50","sender":"Walter Ponce","tipo":"finalizacion","sumario":"238025/2026","dispositivos":3},{"fecha":"2026-04-21","hora":"07:20","sender":"Flavia Romero","tipo":"finalizacion","sumario":"203771/2026","dispositivos":1},{"fecha":"2026-04-21","hora":"07:29","sender":"Flavia Romero","tipo":"inicio","sumario":"241284/2026","dispositivos":3},{"fecha":"2026-04-21","hora":"08:39","sender":"Evelyn Ramos","tipo":"inicio","sumario":"241122/2026","dispositivos":3},{"fecha":"2026-04-21","hora":"11:27","sender":"Cintia Sandoval","tipo":"inicio","sumario":"213847/2026","dispositivos":2},{"fecha":"2026-04-21","hora":"13:26","sender":"Santiago Pociello","tipo":"inicio","sumario":"241132/2026","dispositivos":8},{"fecha":"2026-04-21","hora":"13:47","sender":"Viviana De Francesco","tipo":"recepcion","sumario":"250259/2026","dispositivos":2},{"fecha":"2026-04-21","hora":"16:03","sender":"Viviana De Francesco","tipo":"recepcion","sumario":"250722/2026","dispositivos":1},{"fecha":"2026-04-21","hora":"16:26","sender":"Alejandro Capellini","tipo":"inicio","sumario":"250722/2026","dispositivos":1},{"fecha":"2026-04-21","hora":"17:10","sender":"Inspector Nazareno Avalos","tipo":"recepcion","sumario":"250875/2026","dispositivos":24},{"fecha":"2026-04-21","hora":"17:14","sender":"Cintia Sandoval","tipo":"inicio","sumario":"213847/2026","dispositivos":2},{"fecha":"2026-04-21","hora":"17:50","sender":"Inspector Nazareno Avalos","tipo":"recepcion","sumario":"251102/2026","dispositivos":14},{"fecha":"2026-04-21","hora":"18:06","sender":"Alejandro Capellini","tipo":"finalizacion","sumario":"250722/2026","dispositivos":1},{"fecha":"2026-04-21","hora":"18:47","sender":"Juan Manuel Gonzalez","tipo":"recepcion","sumario":"251171/2026","dispositivos":3},{"fecha":"2026-04-21","hora":"18:48","sender":"Juan Manuel Gonzalez","tipo":"recepcion","sumario":"251235/2026","dispositivos":5},{"fecha":"2026-04-21","hora":"18:50","sender":"Juan Manuel Gonzalez","tipo":"recepcion","sumario":"251264/2026","dispositivos":1},{"fecha":"2026-04-21","hora":"18:58","sender":"Alejandro Capellini","tipo":"inicio","sumario":"251264/2026","dispositivos":1},{"fecha":"2026-04-21","hora":"19:50","sender":"Flavia Romero","tipo":"finalizacion","sumario":"241284/2026","dispositivos":3}];
-const GENERATED_AT = "2026-04-22 14:58";
+const GENERATED_AT = "2026-04-22 20:35";
 
 const STORAGE_KEY  = 'tablero:events:v1';
 const STORAGE_META = 'tablero:meta:v1';
@@ -323,10 +323,6 @@ function TableroPeritos() {
   const [events, setEvents] = useState(SEED_EVENTS);
   const [meta, setMeta] = useState({ source: 'seed', importedAt: null, filename: null });
   const [toast, setToast] = useState(null);
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
-  const fileInputRef = useRef(null);
-  const replaceInputRef = useRef(null);
 
   useEffect(() => {
     // DISABLED: Always use embedded SEED_EVENTS, don't load from localStorage
@@ -386,14 +382,6 @@ function TableroPeritos() {
       showToast('error', 'Error al leer el archivo: ' + err.message);
     }
   }, [events]);
-
-  const resetToSeed = () => {
-    setEvents(SEED_EVENTS);
-    const newMeta = { source: 'seed', importedAt: null, filename: null };
-    setMeta(newMeta);
-    persist(SEED_EVENTS, newMeta);
-    showToast('ok', 'Datos restaurados al archivo original');
-  };
 
   const exportCSV = () => {
     const header = ['fecha', 'hora', 'sender', 'tipo', 'sumario', 'dispositivos'];
@@ -458,69 +446,6 @@ function TableroPeritos() {
         </div>
       )}
 
-      {/* UPLOAD MODAL */}
-      {uploadOpen && (
-        <div
-          className="fixed inset-0 z-40 flex items-center justify-center p-6"
-          style={{ background: '#000c' }}
-          onClick={() => setUploadOpen(false)}
-        >
-          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-xl rounded-sm border p-8"
-               style={{ background: C.card, borderColor: C.borderHi }}>
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="text-[10px] uppercase tracking-[0.28em]" style={{ color: C.mute, fontFamily: fonts.mono }}>
-                  Actualizar tablero
-                </div>
-                <h3 style={{ fontFamily: fonts.serif, fontSize: '2.2rem', lineHeight: 1.1, color: C.text }}>
-                  Importar chat de WhatsApp
-                </h3>
-              </div>
-              <button onClick={() => setUploadOpen(false)} className="rounded-sm p-1 hover:bg-white/5" style={{ color: C.mute }}>
-                <XIcon size={18} />
-              </button>
-            </div>
-
-            <p className="mt-3 text-sm" style={{ color: C.textDim }}>
-              En WhatsApp abrí el grupo → tocá el nombre arriba → <b>Exportar chat</b> → <b>Sin archivos adjuntos</b>. Subí acá el <span style={{ fontFamily: fonts.mono, color: C.gold }}>_chat.txt</span>.
-            </p>
-            <p className="mt-2 text-xs" style={{ color: C.mute, fontFamily: fonts.mono }}>
-              Solo se guarda en <b>este navegador</b> (no se sube a ningún servidor).
-            </p>
-
-            <div
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f, 'merge'); }}
-              onClick={() => fileInputRef.current?.click()}
-              className="mt-6 cursor-pointer rounded-sm border-2 border-dashed px-6 py-10 text-center transition-colors"
-              style={{ borderColor: dragOver ? C.gold : C.borderHi, background: dragOver ? `${C.gold}11` : 'transparent' }}
-            >
-              <div style={{ color: dragOver ? C.gold : C.textDim }}>
-                <UpIcon size={28} />
-              </div>
-              <div className="mt-3" style={{ color: C.text, fontSize: 14 }}>
-                Arrastrá el archivo o <span style={{ color: C.gold, textDecoration: 'underline' }}>hacé click</span>
-              </div>
-              <div className="mt-1 text-xs" style={{ color: C.mute, fontFamily: fonts.mono }}>
-                .txt · formato iOS/Android en español
-              </div>
-              <input ref={fileInputRef} type="file" accept=".txt,text/plain" className="hidden"
-                     onChange={(e) => handleFile(e.target.files?.[0], 'merge')} />
-            </div>
-
-            <div className="mt-4 text-xs" style={{ color: C.mute, fontFamily: fonts.mono, lineHeight: 1.6 }}>
-              Por defecto <span style={{ color: C.sage }}>agrega sin duplicar</span>.{' '}
-              <button onClick={() => replaceInputRef.current?.click()} className="underline" style={{ color: C.crimson }}>
-                reemplazar todo en lugar de agregar
-              </button>
-              <input ref={replaceInputRef} type="file" accept=".txt,text/plain" className="hidden"
-                     onChange={(e) => handleFile(e.target.files?.[0], 'replace')} />
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="relative mx-auto max-w-[1400px] px-6 py-10 md:px-12 md:py-14">
 
         {/* HEADER */}
@@ -538,26 +463,12 @@ function TableroPeritos() {
               </p>
 
               <div className="mt-5 flex flex-wrap gap-2">
-                <button onClick={() => setUploadOpen(true)}
-                        className="inline-flex items-center gap-2 rounded-sm border px-3 py-2 text-xs uppercase tracking-[0.15em]"
-                        style={{ background: C.gold, borderColor: C.gold, color: C.ink, fontFamily: fonts.mono, fontWeight: 600 }}>
-                  <UpIcon size={13} color={C.ink} />
-                  Importar chat
-                </button>
                 <button onClick={exportCSV}
                         className="inline-flex items-center gap-2 rounded-sm border px-3 py-2 text-xs uppercase tracking-[0.15em] hover:bg-white/5"
                         style={{ borderColor: C.border, color: C.textDim, fontFamily: fonts.mono }}>
                   <DlIcon size={13} />
                   Exportar CSV
                 </button>
-                {meta.source === 'import' && (
-                  <button onClick={resetToSeed}
-                          className="inline-flex items-center gap-2 rounded-sm border px-3 py-2 text-xs uppercase tracking-[0.15em] hover:bg-white/5"
-                          style={{ borderColor: C.border, color: C.mute, fontFamily: fonts.mono }}>
-                    <Reset size={12} />
-                    Restaurar original
-                  </button>
-                )}
               </div>
 
               <div className="mt-3 text-[10px] uppercase tracking-[0.2em]" style={{ color: C.mute, fontFamily: fonts.mono }}>
