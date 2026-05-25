@@ -90,14 +90,25 @@ def main():
     out = out.replace('__GENERATED_AT__', datetime.now().strftime('%Y-%m-%d %H:%M'))
     OUT_PATH.write_text(out, encoding='utf-8')
 
+    PERITOS = {
+        'Daniel Altamirano', 'Gonzalo Abraldes', 'Alejandro Capellini', 'Oscar Cussit',
+        'Ariel Lopez', 'Guido Orellana', 'Hernan Portillo', 'Santiago Pociello',
+        'Walter Ponce', 'Flavia Romero', 'Evelyn Ramos', 'Marcos Sodini',
+        'Karen Trepowski', 'Ezequiel Vecino', 'Cintia Sandoval', 'Horacio Lopez',
+    }
+    JUDICIALES = {
+        'Inspector Nazareno Avalos', 'Gimena Rodriguez', 'Juan Manuel Gonzalez',
+        'Yesica Aranda', 'Cristian Navarro', 'Viviana De Francesco', 'Cintia Navarro',
+    }
+
     # Resumen
     by_tipo = {}
     disp_by_tipo = {}
     for e in events:
         by_tipo[e['tipo']] = by_tipo.get(e['tipo'], 0) + 1
         disp_by_tipo[e['tipo']] = disp_by_tipo.get(e['tipo'], 0) + e['dispositivos']
-    peritos = {e['sender'] for e in events if e['tipo'] != 'recepcion'}
-    judiciales = {e['sender'] for e in events if e['tipo'] == 'recepcion'}
+    peritos = {e['sender'] for e in events if e['sender'] in PERITOS}
+    judiciales = {e['sender'] for e in events if e['sender'] in JUDICIALES}
     total_disp = sum(e['dispositivos'] for e in events)
 
     print(f'✔ Tablero regenerado: {OUT_PATH}')

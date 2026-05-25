@@ -113,20 +113,28 @@ const initials = (name) => {
 
 const SCORE = { inicio: 1, finalizacion: 2, dispositivo: 0.1 };
 
+const PERITOS = new Set([
+  'Daniel Altamirano', 'Gonzalo Abraldes', 'Alejandro Capellini', 'Oscar Cussit',
+  'Ariel Lopez', 'Guido Orellana', 'Hernan Portillo', 'Santiago Pociello',
+  'Walter Ponce', 'Flavia Romero', 'Evelyn Ramos', 'Marcos Sodini',
+  'Karen Trepowski', 'Ezequiel Vecino', 'Cintia Sandoval', 'Horacio Lopez',
+]);
+
+const JUDICIALES = new Set([
+  'Inspector Nazareno Avalos', 'Gimena Rodriguez', 'Juan Manuel Gonzalez',
+  'Yesica Aranda', 'Cristian Navarro', 'Viviana De Francesco', 'Cintia Navarro',
+]);
+
 function computeAll(events, referenceDate) {
-  const peritoEv = events.filter((e) => e.tipo !== 'recepcion');
-  const judEv    = events.filter((e) => e.tipo === 'recepcion');
-  const peritoNames = [...new Set(peritoEv.map((e) => e.sender))];
+  const peritoEv = events.filter((e) => PERITOS.has(e.sender));
+  const judEv    = events.filter((e) => JUDICIALES.has(e.sender));
   const judNames = [...new Set(judEv.map((e) => e.sender))];
 
   const today = referenceDate;
   const hoyStr = iso(today);
   const startOfMonth = iso(new Date(today.getFullYear(), today.getMonth(), 1));
 
-  // Técnicos que deben aparecer aunque no tengan eventos
-  const TECNICOS_ADICIONALES = ['Ariel Lopez', 'Ezequiel Vecino', 'Daniel Altamirano'];
-  
-  const allTecnicos = [...new Set([...peritoNames, ...TECNICOS_ADICIONALES])];
+  const allTecnicos = [...PERITOS];
 
   const stats = allTecnicos.map((name) => {
     const mine = peritoEv.filter((e) => e.sender === name);
